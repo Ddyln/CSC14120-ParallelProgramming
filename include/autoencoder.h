@@ -55,10 +55,10 @@ class Autoencoder {
 
     // Intermediate activations (for batch_size=32)
     float *act1, *act2, *act3, *act4, *act5;
-    
+
     // Intermediate storage for backward pass
     float *pool1, *conv3_out, *up1, *up2;
-    
+
     // Current batch size
     int current_batch_size;
 

@@ -1,6 +1,5 @@
 
 #include <stdio.h>
-#include <string.h>
 
 #include "autoencoder.h"
 #include "cifar10_dataset.h"

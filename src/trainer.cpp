@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdio>
+
 #include "layers.h"
 
 void train_autoencoder(
@@ -25,7 +26,7 @@ void train_autoencoder(
 
         for (size_t batch = 0; batch < num_batches; batch++) {
             auto batch_start = std::chrono::high_resolution_clock::now();
-            
+
             // load batch
             auto batch_data = dataset.next_train_batch(config.batch_size);
             const float* batch_images = batch_data.first.data();
@@ -56,23 +57,24 @@ void train_autoencoder(
             model.update_weights(config.learning_rate);
 
             epoch_loss += batch_loss;
-            
+
             auto batch_end = std::chrono::high_resolution_clock::now();
             auto batch_total = std::chrono::duration_cast<std::chrono::milliseconds>(
                 batch_end - batch_start
             );
 
-			printf(
-				"  Epoch %d/%d - Batch %zu/%zu - Loss: %.6f - Forward: %ld ms - Backward: %ld ms - Total: %ld ms\n",
-				epoch + 1,
-				config.epochs,
-				batch + 1,
-				num_batches,
-				batch_loss,
-				forward_time.count(),
-				backward_time.count(),
-				batch_total.count()
-			);
+            printf(
+                "  Epoch %d/%d - Batch %zu/%zu - Loss: %.6f - Forward: %ld ms - "
+                "Backward: %ld ms - Total: %ld ms\n",
+                epoch + 1,
+                config.epochs,
+                batch + 1,
+                num_batches,
+                batch_loss,
+                forward_time.count(),
+                backward_time.count(),
+                batch_total.count()
+            );
 
             delete[] output;
         }
@@ -92,7 +94,12 @@ void train_autoencoder(
 
     printf("\nSaving model weights...\n");
     char model_path[512];
-    snprintf(model_path, sizeof(model_path), "%s/autoencoder_weights.bin", output_folder);
+    snprintf(
+        model_path,
+        sizeof(model_path),
+        "%s/autoencoder_weights.bin",
+        output_folder
+    );
     model.save_weights(model_path);
     printf("Model saved to: %s\n", model_path);
 

@@ -14,8 +14,7 @@ void extract_and_save_features(
 
     // Extract training features
     printf("Extracting training features...\n");
-    for (size_t i = 0; i < 1; i++) {
-    // for (size_t i = 0; i < dataset.train_size(); i++) {
+    for (size_t i = 0; i < dataset.train_size(); i++) {
         float* img = dataset.get_train_image(i);
         model.extract_features(img, train_features + i * feature_size, 1);
         if ((i + 1) % 10000 == 0) {
@@ -24,14 +23,14 @@ void extract_and_save_features(
     }
 
     // Extract test features
-    // printf("Extracting test features...\n");
-    // for (size_t i = 0; i < dataset.test_size(); i++) {
-    //     float* img = dataset.get_test_image(i);
-    //     model.extract_features(img, test_features + i * feature_size, 1);
-    //     if ((i + 1) % 2000 == 0) {
-    //         printf("  Processed %zu/%zu images\n", i + 1, dataset.test_size());
-    //     }
-    // }
+    printf("Extracting test features...\n");
+    for (size_t i = 0; i < dataset.test_size(); i++) {
+        float* img = dataset.get_test_image(i);
+        model.extract_features(img, test_features + i * feature_size, 1);
+        if ((i + 1) % 2000 == 0) {
+            printf("  Processed %zu/%zu images\n", i + 1, dataset.test_size());
+        }
+    }
 
     // Save features to binary files
     char train_path[512], test_path[512];
