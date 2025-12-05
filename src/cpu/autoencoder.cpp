@@ -1,11 +1,11 @@
-#include "autoencoder.h"
+#include "cpu/autoencoder.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 
-#include "layers.h"
+#include "cpu/layers.h"
 
 Autoencoder::Autoencoder() {
     w1 = b1 = w2 = b2 = w3 = b3 = w4 = b4 = w5 = b5 = nullptr;
