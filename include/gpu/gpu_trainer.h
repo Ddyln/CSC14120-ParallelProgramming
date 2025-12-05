@@ -1,8 +1,8 @@
 #ifndef GPU_TRAINER_H
 #define GPU_TRAINER_H
 
-#include "cifar10_dataset.h"
-#include "gpu_autoencoder.h"
+#include "common/cifar10_dataset.h"
+#include "gpu/gpu_autoencoder.h"
 
 // GPU Training configuration
 struct GPUTrainConfig {
