@@ -32,10 +32,16 @@ void train_gpu_autoencoder_v2(
 
     int num_batches = dataset.train_size() / config.batch_size;
     int input_size = 3 * 32 * 32;
+    int batch_bytes = config.batch_size * input_size * sizeof(float);
 
-    // Host buffers for batch (V2 API uses host pointers)
+    // Host buffers for batch
     float* h_batch = new float[config.batch_size * input_size];
-    float* h_output = new float[config.batch_size * input_size];
+    
+    // Device buffers for batch (Optimized: Allocate once, reuse)
+    float* d_input;
+    float* d_output;
+    cudaMalloc(&d_input, batch_bytes);
+    cudaMalloc(&d_output, batch_bytes);
 
     auto total_start = std::chrono::high_resolution_clock::now();
 
@@ -51,21 +57,24 @@ void train_gpu_autoencoder_v2(
             const float* train_data = dataset.train_images().data();
             for (int i = 0; i < config.batch_size; ++i) {
                 int idx = batch * config.batch_size + i;
-            // Copy batch data (host to host)
-            memcpy(h_batch + i * input_size,
+                // Copy batch data (host to host)
+                memcpy(h_batch + i * input_size,
                        train_data + idx * input_size,
                        input_size * sizeof(float));
             }
+            
+            // Copy batch to device ONCE per iteration
+            cudaMemcpy(d_input, h_batch, batch_bytes, cudaMemcpyHostToDevice);
 
-            // Forward pass (V2 API with host pointers)
-            model.forward(h_batch, h_output, config.batch_size);
+            // Forward pass (Device API - No extra copies)
+            model.forward_gpu(d_input, d_output, config.batch_size);
 
-            // Compute loss (V2 API - autoencoder, target = input)
-            float batch_loss = model.compute_loss(h_output, h_batch, config.batch_size);
+            // Compute loss (Device API - No extra copies)
+            float batch_loss = model.compute_loss_gpu(d_output, d_input, config.batch_size);
             epoch_loss += batch_loss;
 
-            // Backward pass (V2 API with host pointers)
-            model.backward(h_batch, h_batch, config.batch_size);
+            // Backward pass (Device API - No extra copies)
+            model.backward_gpu(d_input, d_input, config.batch_size);
 
             // Update weights (using vectorized SGD)
             model.update_weights(config.learning_rate);
@@ -99,7 +108,8 @@ void train_gpu_autoencoder_v2(
 
     // Cleanup
     delete[] h_batch;
-    delete[] h_output;
+    cudaFree(d_input);
+    cudaFree(d_output);
 }
 
 // ============================================================================

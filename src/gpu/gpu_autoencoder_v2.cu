@@ -224,6 +224,16 @@ void GPUAutoencoderV2::forward(const float* h_input, float* h_output, int batch_
 }
 
 // ============================================================================
+// FORWARD PASS - Device API (public)
+// ============================================================================
+
+void GPUAutoencoderV2::forward_gpu(const float* d_in, float* d_out, int batch_size) {
+    current_batch_size = batch_size;
+    allocate_activations(batch_size);
+    forward_device(d_in, d_out, batch_size);
+}
+
+// ============================================================================
 // FORWARD PASS - Device API (internal)
 // ============================================================================
 
@@ -359,6 +369,10 @@ float GPUAutoencoderV2::compute_loss(const float* h_output, const float* h_targe
     return loss;
 }
 
+float GPUAutoencoderV2::compute_loss_gpu(const float* d_output, const float* d_target, int batch_size) {
+    return gpu_v2::mse_loss_v2(d_output, d_target, batch_size, CONV5_OUT, CONV5_H, CONV5_W);
+}
+
 // ============================================================================
 // BACKWARD PASS - Complete GPU implementation
 // ============================================================================
@@ -433,6 +447,13 @@ void GPUAutoencoderV2::backward(const float* h_input, const float* h_target, int
     
     // Call device backward
     backward_device(d_input, d_target, batch_size);
+}
+
+void GPUAutoencoderV2::backward_gpu(const float* d_in, const float* d_tgt, int batch_size) {
+    current_batch_size = batch_size;
+    allocate_activations(batch_size);
+    allocate_gradients(batch_size);
+    backward_device(d_in, d_tgt, batch_size);
 }
 
 void GPUAutoencoderV2::backward_device(const float* d_in, const float* d_tgt, int batch_size) {

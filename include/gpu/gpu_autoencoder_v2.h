@@ -35,9 +35,15 @@ class GPUAutoencoderV2 {
 
     // Forward pass: host input -> host output (same as baseline)
     void forward(const float* h_input, float* h_output, int batch_size);
+    
+    // Forward pass: device input -> device output (Optimized for training)
+    void forward_gpu(const float* d_input, float* d_output, int batch_size);
 
     // Backward pass: computes gradients (host pointers)
     void backward(const float* h_input, const float* h_target, int batch_size);
+    
+    // Backward pass: computes gradients (device pointers)
+    void backward_gpu(const float* d_input, const float* d_target, int batch_size);
 
     // Update weights using SGD with vectorized operations
     void update_weights(float learning_rate);
@@ -47,6 +53,9 @@ class GPUAutoencoderV2 {
 
     // Compute MSE loss (host pointers)
     float compute_loss(const float* h_output, const float* h_target, int batch_size);
+    
+    // Compute MSE loss (device pointers)
+    float compute_loss_gpu(const float* d_output, const float* d_target, int batch_size);
 
     // Save/Load weights
     void save_weights(const std::string& filename);
