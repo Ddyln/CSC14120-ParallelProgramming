@@ -45,9 +45,17 @@ void train_gpu_autoencoder_v2(
 
     auto total_start = std::chrono::high_resolution_clock::now();
 
+    // CUDA events for fine-grained timing (forward / backward / update)
+    cudaEvent_t ev_start, ev_stop;
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_stop);
+
     for (int epoch = 0; epoch < config.epochs; ++epoch) {
         auto epoch_start = std::chrono::high_resolution_clock::now();
         float epoch_loss = 0.0f;
+        float epoch_forward_ms = 0.0f;
+        float epoch_backward_ms = 0.0f;
+        float epoch_update_ms = 0.0f;
 
         // Shuffle at start of each epoch
         dataset.shuffle_train();
@@ -66,21 +74,40 @@ void train_gpu_autoencoder_v2(
             cudaMemcpy(d_input, h_batch, batch_bytes, cudaMemcpyHostToDevice);
 
             // Forward pass (Device API - No extra copies!)
+            cudaEventRecord(ev_start);
             model.forward(d_input, d_output, config.batch_size);
+            cudaEventRecord(ev_stop);
+            cudaEventSynchronize(ev_stop);
+            float f_ms = 0.0f;
+            cudaEventElapsedTime(&f_ms, ev_start, ev_stop);
+            epoch_forward_ms += f_ms;
 
             // Compute loss (Device API - No extra copies!)
             float batch_loss = model.compute_loss(d_output, d_input, config.batch_size);
             epoch_loss += batch_loss;
 
             // Backward pass (Device API - uses activations from forward)
+            cudaEventRecord(ev_start);
             model.backward(d_input, d_input, config.batch_size);
+            cudaEventRecord(ev_stop);
+            cudaEventSynchronize(ev_stop);
+            float b_ms = 0.0f;
+            cudaEventElapsedTime(&b_ms, ev_start, ev_stop);
+            epoch_backward_ms += b_ms;
 
             // Update weights (vectorized SGD)
+            cudaEventRecord(ev_start);
             model.update_weights(config.learning_rate);
+            cudaEventRecord(ev_stop);
+            cudaEventSynchronize(ev_stop);
+            float u_ms = 0.0f;
+            cudaEventElapsedTime(&u_ms, ev_start, ev_stop);
+            epoch_update_ms += u_ms;
 
             if (config.verbose && (batch + 1) % 100 == 0) {
-                printf("  Epoch %d/%d, Batch %d/%d, Loss: %.6f\n",
-                       epoch + 1, config.epochs, batch + 1, num_batches, batch_loss);
+                  printf("  Epoch %d/%d, Batch %d/%d, Loss: %.6f (F: %.1f ms, B: %.1f ms, U: %.1f ms)\n",
+                      epoch + 1, config.epochs, batch + 1, num_batches,
+                      batch_loss, f_ms, b_ms, u_ms);
             }
         }
 
@@ -88,9 +115,10 @@ void train_gpu_autoencoder_v2(
         auto epoch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             epoch_end - epoch_start).count();
 
-        float avg_loss = epoch_loss / num_batches;
-        printf("Epoch %d/%d completed in %.2f seconds, Avg Loss: %.6f\n",
-               epoch + 1, config.epochs, epoch_duration / 1000.0f, avg_loss);
+         float avg_loss = epoch_loss / num_batches;
+         printf("Epoch %d/%d completed in %.2f seconds, Avg Loss: %.6f (F: %.0f ms, B: %.0f ms, U: %.0f ms)\n",
+             epoch + 1, config.epochs, epoch_duration / 1000.0f, avg_loss,
+             epoch_forward_ms, epoch_backward_ms, epoch_update_ms);
     }
 
     auto total_end = std::chrono::high_resolution_clock::now();
@@ -110,6 +138,9 @@ void train_gpu_autoencoder_v2(
     cudaFree(d_input);
     cudaFree(d_output);
     delete[] h_batch;
+
+    cudaEventDestroy(ev_start);
+    cudaEventDestroy(ev_stop);
 }
 
 // ============================================================================

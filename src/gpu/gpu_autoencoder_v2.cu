@@ -412,147 +412,146 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
     cudaMemset(d_grad_b5, 0, B5_SIZE * sizeof(float));
 
     int output_size = batch_size * CONV5_OUT * CONV5_H * CONV5_W;
-    float scale = 2.0f / output_size;
 
-    // Compute MSE gradient on GPU
-    dim3 block(256);
-    dim3 grid((output_size + 255) / 256);
-    mse_gradient_kernel_v2<<<grid, block>>>(d_conv5_out, d_target, d_grad_conv5, scale, output_size);
-
-    dim3 spatial_block(16, 16);
+    // Compute MSE gradient on GPU (reuses wrapper in gpu_v2)
+    int threads = 256;
+    int blocks = (output_size + threads - 1) / threads;
+    gpu_v2::mse_gradient_kernel_v2<<<blocks, threads>>>(
+        d_conv5_out,
+        d_target,
+        d_grad_conv5,
+        output_size
+    );
 
     // Backward through Conv5 (no ReLU)
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::conv2d_weight_grad_optimized_kernel(
-            d_up2_out + b * CONV4_OUT * UP2_H * UP2_W,
-            d_grad_conv5 + b * CONV5_OUT * CONV5_H * CONV5_W,
-            d_grad_w5, CONV4_OUT, CONV5_OUT, UP2_H, UP2_W, 3, 1
-        );
-        
-        dim3 data_grid5((UP2_W + 15) / 16, (UP2_H + 15) / 16, CONV4_OUT);
-        conv2d_backward_data_v2<<<data_grid5, spatial_block>>>(
-            d_grad_conv5 + b * CONV5_OUT * CONV5_H * CONV5_W,
-            d_w5, d_grad_up2 + b * CONV4_OUT * UP2_H * UP2_W,
-            CONV4_OUT, CONV5_OUT, UP2_H, UP2_W, 3, 1
-        );
-    }
-    gpu_v2::bias_grad_optimized_kernel(
-        d_grad_conv5, d_grad_b5, CONV5_OUT, CONV5_H * batch_size, CONV5_W
+    gpu_v2::conv2d_backward_full_v2(
+        d_up2_out,
+        d_w5,
+        d_conv5_out,
+        d_grad_conv5,
+        d_grad_up2,
+        d_grad_w5,
+        d_grad_b5,
+        batch_size,
+        CONV4_OUT,
+        CONV5_OUT,
+        UP2_H,
+        UP2_W
     );
 
     // Backward through Upsample2
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::upsample2d_backward_optimized_kernel(
-            d_grad_up2 + b * CONV4_OUT * UP2_H * UP2_W,
-            d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
-            CONV4_OUT, CONV4_H, CONV4_W, UP2_H, UP2_W, 2
-        );
-    }
+    gpu_v2::upsample2d_backward_v2(
+        d_grad_up2,
+        d_grad_conv4,
+        batch_size,
+        CONV4_OUT,
+        CONV4_H,
+        CONV4_W,
+        2
+    );
 
-    // Backward through Conv4 + ReLU (FUSED)
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::conv2d_relu_backward_fused_kernel(
-            d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
-            d_up1_out + b * CONV3_OUT * UP1_H * UP1_W,
-            d_w4, d_conv4_out + b * CONV4_OUT * CONV4_H * CONV4_W,
-            d_grad_up1 + b * CONV3_OUT * UP1_H * UP1_W,
-            CONV3_OUT, CONV4_OUT, UP1_H, UP1_W, 3, 1
-        );
-        
-        gpu_v2::conv2d_weight_grad_optimized_kernel(
-            d_up1_out + b * CONV3_OUT * UP1_H * UP1_W,
-            d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
-            d_grad_w4, CONV3_OUT, CONV4_OUT, UP1_H, UP1_W, 3, 1
-        );
-    }
-    gpu_v2::bias_grad_optimized_kernel(
-        d_grad_conv4, d_grad_b4, CONV4_OUT, CONV4_H * batch_size, CONV4_W
+    // Backward through Conv4 + ReLU
+    gpu_v2::conv2d_backward_full_v2(
+        d_up1_out,
+        d_w4,
+        d_conv4_out,
+        d_grad_conv4,
+        d_grad_up1,
+        d_grad_w4,
+        d_grad_b4,
+        batch_size,
+        CONV3_OUT,
+        CONV4_OUT,
+        CONV4_H,
+        CONV4_W
     );
 
     // Backward through Upsample1
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::upsample2d_backward_optimized_kernel(
-            d_grad_up1 + b * CONV3_OUT * UP1_H * UP1_W,
-            d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
-            CONV3_OUT, CONV3_H, CONV3_W, UP1_H, UP1_W, 2
-        );
-    }
+    gpu_v2::upsample2d_backward_v2(
+        d_grad_up1,
+        d_grad_conv3,
+        batch_size,
+        CONV3_OUT,
+        CONV3_H,
+        CONV3_W,
+        2
+    );
 
-    // Backward through Conv3 + ReLU (FUSED)
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::conv2d_relu_backward_fused_kernel(
-            d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
-            d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
-            d_w3, d_conv3_out + b * CONV3_OUT * CONV3_H * CONV3_W,
-            d_grad_pool2 + b * CONV2_OUT * POOL2_H * POOL2_W,
-            CONV2_OUT, CONV3_OUT, POOL2_H, POOL2_W, 3, 1
-        );
-        
-        gpu_v2::conv2d_weight_grad_optimized_kernel(
-            d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
-            d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
-            d_grad_w3, CONV2_OUT, CONV3_OUT, POOL2_H, POOL2_W, 3, 1
-        );
-    }
-    gpu_v2::bias_grad_optimized_kernel(
-        d_grad_conv3, d_grad_b3, CONV3_OUT, CONV3_H * batch_size, CONV3_W
+    // Backward through Conv3 + ReLU
+    gpu_v2::conv2d_backward_full_v2(
+        d_pool2_out,
+        d_w3,
+        d_conv3_out,
+        d_grad_conv3,
+        d_grad_pool2,
+        d_grad_w3,
+        d_grad_b3,
+        batch_size,
+        CONV2_OUT,
+        CONV3_OUT,
+        CONV3_H,
+        CONV3_W
     );
 
     // Backward through MaxPool2
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::maxpool2d_backward_optimized_kernel(
-            d_grad_pool2 + b * CONV2_OUT * POOL2_H * POOL2_W,
-            d_conv2_out + b * CONV2_OUT * CONV2_H * CONV2_W,
-            d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
-            d_grad_conv2 + b * CONV2_OUT * CONV2_H * CONV2_W,
-            CONV2_OUT, CONV2_H, CONV2_W, POOL2_H, POOL2_W, 2, 2
-        );
-    }
+    gpu_v2::maxpool2d_backward_v2(
+        d_grad_pool2,
+        d_conv2_out,
+        d_pool2_out,
+        d_grad_conv2,
+        batch_size,
+        CONV2_OUT,
+        CONV2_H,
+        CONV2_W,
+        2,
+        2
+    );
 
-    // Backward through Conv2 + ReLU (FUSED)
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::conv2d_relu_backward_fused_kernel(
-            d_grad_conv2 + b * CONV2_OUT * CONV2_H * CONV2_W,
-            d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
-            d_w2, d_conv2_out + b * CONV2_OUT * CONV2_H * CONV2_W,
-            d_grad_pool1 + b * CONV1_OUT * POOL1_H * POOL1_W,
-            CONV1_OUT, CONV2_OUT, POOL1_H, POOL1_W, 3, 1
-        );
-        
-        gpu_v2::conv2d_weight_grad_optimized_kernel(
-            d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
-            d_grad_conv2 + b * CONV2_OUT * CONV2_H * CONV2_W,
-            d_grad_w2, CONV1_OUT, CONV2_OUT, POOL1_H, POOL1_W, 3, 1
-        );
-    }
-    gpu_v2::bias_grad_optimized_kernel(
-        d_grad_conv2, d_grad_b2, CONV2_OUT, CONV2_H * batch_size, CONV2_W
+    // Backward through Conv2 + ReLU
+    gpu_v2::conv2d_backward_full_v2(
+        d_pool1_out,
+        d_w2,
+        d_conv2_out,
+        d_grad_conv2,
+        d_grad_pool1,
+        d_grad_w2,
+        d_grad_b2,
+        batch_size,
+        CONV1_OUT,
+        CONV2_OUT,
+        CONV2_H,
+        CONV2_W
     );
 
     // Backward through MaxPool1
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::maxpool2d_backward_optimized_kernel(
-            d_grad_pool1 + b * CONV1_OUT * POOL1_H * POOL1_W,
-            d_conv1_out + b * CONV1_OUT * CONV1_H * CONV1_W,
-            d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
-            d_grad_conv1 + b * CONV1_OUT * CONV1_H * CONV1_W,
-            CONV1_OUT, CONV1_H, CONV1_W, POOL1_H, POOL1_W, 2, 2
-        );
-    }
-
-    // Backward through Conv1 + ReLU (weights only)
-    for (int b = 0; b < batch_size; ++b) {
-        gpu_v2::conv2d_weight_grad_optimized_kernel(
-            d_input + b * INPUT_C * INPUT_H * INPUT_W,
-            d_grad_conv1 + b * CONV1_OUT * CONV1_H * CONV1_W,
-            d_grad_w1, INPUT_C, CONV1_OUT, INPUT_H, INPUT_W, 3, 1
-        );
-    }
-    gpu_v2::bias_grad_optimized_kernel(
-        d_grad_conv1, d_grad_b1, CONV1_OUT, CONV1_H * batch_size, CONV1_W
+    gpu_v2::maxpool2d_backward_v2(
+        d_grad_pool1,
+        d_conv1_out,
+        d_pool1_out,
+        d_grad_conv1,
+        batch_size,
+        CONV1_OUT,
+        CONV1_H,
+        CONV1_W,
+        2,
+        2
     );
 
-    cudaDeviceSynchronize();
+    // Backward through Conv1 + ReLU
+    gpu_v2::conv2d_backward_full_v2(
+        d_input,
+        d_w1,
+        d_conv1_out,
+        d_grad_conv1,
+        d_grad_conv1,
+        d_grad_w1,
+        d_grad_b1,
+        batch_size,
+        INPUT_C,
+        CONV1_OUT,
+        CONV1_H,
+        CONV1_W
+    );
 }
 
 // ============================================================================

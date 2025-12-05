@@ -331,246 +331,119 @@ void upsample2d_forward_v2(
 }
 
 // ============================================================================
-// BACKWARD KERNELS (OPTIMIZED)
+// BACKWARD HELPERS (REUSE BASELINE-STYLE KERNELS WITH BATCH DIMENSION)
 // ============================================================================
 
-__global__ void conv2d_relu_backward_fused_kernel_impl(
-    const float* __restrict__ grad_output,
-    const float* __restrict__ input,
-    const float* __restrict__ weight,
-    const float* __restrict__ conv_output,
-    float* __restrict__ grad_input,
-    int in_channels, int out_channels, int height, int width,
-    int kernel_size, int padding
-) {
-    int w = blockIdx.x * blockDim.x + threadIdx.x;
-    int h = blockIdx.y * blockDim.y + threadIdx.y;
-    int c = blockIdx.z;
-    
-    if (w >= width || h >= height) return;
-    
-    float sum = 0.0f;
-    
-    for (int oc = 0; oc < out_channels; ++oc) {
-        int grad_idx = oc * height * width + h * width + w;
-        int conv_idx = oc * height * width + h * width + w;
-        
-        // FUSED: Apply ReLU gradient
-        float grad = (conv_output[conv_idx] > 0.0f) ? grad_output[grad_idx] : 0.0f;
-        
-        for (int kh = 0; kh < kernel_size; ++kh) {
-            for (int kw = 0; kw < kernel_size; ++kw) {
-                int oh = h + padding - kh;
-                int ow = w + padding - kw;
-                
-                if (oh >= 0 && oh < height && ow >= 0 && ow < width) {
-                    int weight_idx = oc * in_channels * kernel_size * kernel_size +
-                                    c * kernel_size * kernel_size +
-                                    kh * kernel_size + kw;
-                    sum += grad * weight[weight_idx];
-                }
-            }
-        }
-    }
-    
-    int input_idx = c * height * width + h * width + w;
-    grad_input[input_idx] = sum;
-}
-
-__global__ void conv2d_weight_grad_optimized_kernel_impl(
-    const float* __restrict__ input,
-    const float* __restrict__ grad_output,
-    float* __restrict__ grad_weight,
-    int in_channels, int out_channels, int height, int width,
-    int kernel_size, int padding
-) {
-    int ic = blockIdx.x;
-    int oc = blockIdx.y;
-    int k = threadIdx.x;
-    
-    if (k >= kernel_size * kernel_size) return;
-    
-    int kh = k / kernel_size;
-    int kw = k % kernel_size;
-    
-    float sum = 0.0f;
-    
-    for (int h = 0; h < height; ++h) {
-        for (int w = 0; w < width; ++w) {
-            int ih = h + padding - kh;
-            int iw = w + padding - kw;
-            
-            if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-                int input_idx = ic * height * width + ih * width + iw;
-                int grad_idx = oc * height * width + h * width + w;
-                sum += input[input_idx] * grad_output[grad_idx];
-            }
-        }
-    }
-    
-    int weight_idx = oc * in_channels * kernel_size * kernel_size +
-                     ic * kernel_size * kernel_size + k;
-    atomicAdd(&grad_weight[weight_idx], sum);
-}
-
-__global__ void bias_grad_optimized_kernel_impl(
-    const float* __restrict__ grad_output,
-    float* __restrict__ grad_bias,
-    int out_channels, int height, int width
-) {
-    extern __shared__ float shared[];
-    
-    int oc = blockIdx.x;
-    int tid = threadIdx.x;
-    int stride = blockDim.x;
-    
-    float sum = 0.0f;
-    int total = height * width;
-    
-    for (int i = tid; i < total; i += stride) {
-        sum += grad_output[oc * total + i];
-    }
-    
-    shared[tid] = sum;
-    __syncthreads();
-    
-    // Reduction
-    for (int s = stride / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            shared[tid] += shared[tid + s];
-        }
-        __syncthreads();
-    }
-    
-    if (tid == 0) {
-        atomicAdd(&grad_bias[oc], shared[0]);
-    }
-}
-
-__global__ void maxpool2d_backward_optimized_kernel_impl(
-    const float* __restrict__ grad_output,
-    const float* __restrict__ input,
+// Compute dL/doutput for MSE loss: 2*(y - y_hat)/N
+__global__ void mse_gradient_kernel_v2(
     const float* __restrict__ output,
-    float* __restrict__ grad_input,
-    int channels, int in_height, int in_width,
-    int out_height, int out_width, int pool_size, int stride
+    const float* __restrict__ target,
+    float* __restrict__ grad_output,
+    int total_size
 ) {
-    int w = blockIdx.x * blockDim.x + threadIdx.x;
-    int h = blockIdx.y * blockDim.y + threadIdx.y;
-    int c = blockIdx.z;
-    
-    if (w >= in_width || h >= in_height) return;
-    
-    int input_idx = c * in_height * in_width + h * in_width + w;
-    float input_val = input[input_idx];
-    float grad = 0.0f;
-    
-    int oh_start = h / stride;
-    int ow_start = w / stride;
-    
-    for (int oh = oh_start; oh < out_height && oh * stride < h + pool_size; ++oh) {
-        for (int ow = ow_start; ow < out_width && ow * stride < w + pool_size; ++ow) {
-            int output_idx = c * out_height * out_width + oh * out_width + ow;
-            if (input_val == output[output_idx]) {
-                grad += grad_output[output_idx];
-            }
-        }
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < total_size) {
+        float diff = output[idx] - target[idx];
+        grad_output[idx] = 2.0f * diff / total_size;
     }
-    
-    grad_input[input_idx] = grad;
 }
 
-__global__ void upsample2d_backward_optimized_kernel_impl(
-    const float* __restrict__ grad_output,
-    float* __restrict__ grad_input,
-    int channels, int in_height, int in_width,
-    int out_height, int out_width, int scale_factor
-) {
-    int w = blockIdx.x * blockDim.x + threadIdx.x;
-    int h = blockIdx.y * blockDim.y + threadIdx.y;
-    int c = blockIdx.z;
-    
-    if (w >= in_width || h >= in_height) return;
-    
-    float sum = 0.0f;
-    
-    for (int sh = 0; sh < scale_factor; ++sh) {
-        for (int sw = 0; sw < scale_factor; ++sw) {
-            int oh = h * scale_factor + sh;
-            int ow = w * scale_factor + sw;
-            int grad_idx = c * out_height * out_width + oh * out_width + ow;
-            sum += grad_output[grad_idx];
-        }
-    }
-    
-    int input_idx = c * in_height * in_width + h * in_width + w;
-    grad_input[input_idx] = sum;
-}
+// Thin wrappers that mirror the baseline GPU implementation but keep them
+// inside the gpu_v2 namespace for better reuse from GPUAutoencoderV2.
 
-// Wrapper functions
-void conv2d_relu_backward_fused_kernel(
-    const float* grad_output, const float* input, const float* weight,
-    const float* conv_output, float* grad_input,
-    int in_channels, int out_channels, int height, int width,
-    int kernel_size, int padding
+void conv2d_backward_input_v2(
+    const float* d_input,
+    const float* d_weights,
+    const float* d_grad_output,
+    float* d_grad_input,
+    int batch_size,
+    int in_channels,
+    int out_channels,
+    int height,
+    int width
 ) {
-    dim3 block(16, 16);
-    dim3 grid((width + 15) / 16, (height + 15) / 16, in_channels);
-    
-    conv2d_relu_backward_fused_kernel_impl<<<grid, block>>>(
-        grad_output, input, weight, conv_output, grad_input,
-        in_channels, out_channels, height, width, kernel_size, padding
+    conv2d_backward_input(
+        d_weights,
+        d_grad_output,
+        d_grad_input,
+        batch_size,
+        in_channels,
+        out_channels,
+        height,
+        width
     );
 }
 
-void conv2d_weight_grad_optimized_kernel(
-    const float* input, const float* grad_output, float* grad_weight,
-    int in_channels, int out_channels, int height, int width,
-    int kernel_size, int padding
+void conv2d_backward_full_v2(
+    const float* d_input,
+    const float* d_weights,
+    const float* d_conv_output,
+    const float* d_grad_output,
+    float* d_grad_input,
+    float* d_grad_weights,
+    float* d_grad_bias,
+    int batch_size,
+    int in_channels,
+    int out_channels,
+    int height,
+    int width
 ) {
-    dim3 grid(in_channels, out_channels);
-    int threads = kernel_size * kernel_size;
-    
-    conv2d_weight_grad_optimized_kernel_impl<<<grid, threads>>>(
-        input, grad_output, grad_weight,
-        in_channels, out_channels, height, width, kernel_size, padding
+    // Use baseline conv2d_backward which computes both input and weight grads.
+    conv2d_backward(
+        d_input,
+        d_weights,
+        d_grad_output,
+        d_grad_input,
+        d_grad_weights,
+        d_grad_bias,
+        batch_size,
+        in_channels,
+        out_channels,
+        height,
+        width
     );
 }
 
-void bias_grad_optimized_kernel(
-    const float* grad_output, float* grad_bias,
-    int out_channels, int height, int width
+void maxpool2d_backward_v2(
+    const float* d_grad_output,
+    const float* d_input,
+    const float* d_output,
+    float* d_grad_input,
+    int batch_size,
+    int channels,
+    int in_height,
+    int in_width,
+    int pool_size,
+    int stride
 ) {
-    bias_grad_optimized_kernel_impl<<<out_channels, 256, 256 * sizeof(float)>>>(
-        grad_output, grad_bias, out_channels, height, width
+    maxpool2d_backward(
+        d_input,
+        d_output,
+        d_grad_output,
+        d_grad_input,
+        batch_size,
+        channels,
+        in_height,
+        in_width
     );
 }
 
-void maxpool2d_backward_optimized_kernel(
-    const float* grad_output, const float* input, const float* output, float* grad_input,
-    int channels, int in_height, int in_width, int out_height, int out_width,
-    int pool_size, int stride
-) {
-    dim3 block(16, 16);
-    dim3 grid((in_width + 15) / 16, (in_height + 15) / 16, channels);
-    
-    maxpool2d_backward_optimized_kernel_impl<<<grid, block>>>(
-        grad_output, input, output, grad_input,
-        channels, in_height, in_width, out_height, out_width, pool_size, stride
-    );
-}
-
-void upsample2d_backward_optimized_kernel(
-    const float* grad_output, float* grad_input,
-    int channels, int in_height, int in_width, int out_height, int out_width,
+void upsample2d_backward_v2(
+    const float* d_grad_output,
+    float* d_grad_input,
+    int batch_size,
+    int channels,
+    int in_height,
+    int in_width,
     int scale_factor
 ) {
-    dim3 block(16, 16);
-    dim3 grid((in_width + 15) / 16, (in_height + 15) / 16, channels);
-    
-    upsample2d_backward_optimized_kernel_impl<<<grid, block>>>(
-        grad_output, grad_input, channels, in_height, in_width,
-        out_height, out_width, scale_factor
+    upsample2d_backward(
+        d_grad_output,
+        d_grad_input,
+        batch_size,
+        channels,
+        in_height,
+        in_width
     );
 }
 
