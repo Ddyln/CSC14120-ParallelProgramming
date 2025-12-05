@@ -395,6 +395,8 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
     dim3 grid((output_size + 255) / 256);
     mse_gradient_kernel_v2<<<grid, block>>>(d_conv5_out, d_target, d_grad_conv5, scale, output_size);
 
+    dim3 spatial_block(16, 16);
+
     // Backward through Conv5 (no ReLU)
     for (int b = 0; b < batch_size; ++b) {
         gpu_v2::conv2d_weight_grad_optimized_kernel(
