@@ -33,26 +33,20 @@ class GPUAutoencoderV2 {
     GPUAutoencoderV2();
     ~GPUAutoencoderV2();
 
-    // Forward pass: host input -> host output (same as baseline)
-    void forward(const float* h_input, float* h_output, int batch_size);
-    
-    // Forward pass: device input -> device output (Optimized for training)
-    void forward_gpu(const float* d_input, float* d_output, int batch_size);
+    // Forward pass: device input -> device output (matches baseline API)
+    void forward(const float* d_input, float* d_output, int batch_size);
 
-    // Backward pass: computes gradients (host pointers)
-    void backward(const float* h_input, const float* h_target, int batch_size);
-    
     // Backward pass: computes gradients (device pointers)
-    void backward_gpu(const float* d_input, const float* d_target, int batch_size);
+    void backward(const float* d_input, const float* d_target, int batch_size);
 
     // Update weights using SGD with vectorized operations
     void update_weights(float learning_rate);
 
-    // Get latent features: host input -> host features (8192-dim)
-    void get_features(const float* h_input, float* h_features, int batch_size);
+    // Get latent features: device input -> device features (8192-dim)
+    void get_features(const float* d_input, float* d_features, int batch_size);
 
-    // Compute MSE loss (host pointers)
-    float compute_loss(const float* h_output, const float* h_target, int batch_size);
+    // Compute MSE loss (device pointers) - returns scalar on host
+    float compute_loss(const float* d_output, const float* d_target, int batch_size);
     
     // Compute MSE loss (device pointers)
     float compute_loss_gpu(const float* d_output, const float* d_target, int batch_size);
@@ -112,8 +106,6 @@ class GPUAutoencoderV2 {
     float *d_grad_w5, *d_grad_b5;
 
     // Device pointers for activations (forward pass)
-    float* d_input;       // Input buffer on device
-    float* d_target;      // Target buffer on device
     float* d_conv1_out;   // After fused Conv1+Bias+ReLU
     float* d_pool1_out;
     float* d_conv2_out;   // After fused Conv2+Bias+ReLU
@@ -145,10 +137,6 @@ class GPUAutoencoderV2 {
     void allocate_gradients(int batch_size);
     void init_weights();
     void free_memory();
-
-    // Internal device operations
-    void forward_device(const float* d_in, float* d_out, int batch_size);
-    void backward_device(const float* d_in, const float* d_tgt, int batch_size);
 };
 
 #endif  // GPU_AUTOENCODER_V2_H

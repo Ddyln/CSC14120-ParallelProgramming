@@ -66,15 +66,15 @@ void train_gpu_autoencoder_v2(
             // Copy batch to device ONCE per iteration
             cudaMemcpy(d_input, h_batch, batch_bytes, cudaMemcpyHostToDevice);
 
-            // Forward pass (Device API - No extra copies)
-            model.forward_gpu(d_input, d_output, config.batch_size);
+            // Forward pass (Device API - computes activations and output)
+            model.forward(d_input, d_output, config.batch_size);
 
             // Compute loss (Device API - No extra copies)
-            float batch_loss = model.compute_loss_gpu(d_output, d_input, config.batch_size);
+            float batch_loss = model.compute_loss(d_output, d_input, config.batch_size);
             epoch_loss += batch_loss;
 
-            // Backward pass (Device API - No extra copies)
-            model.backward_gpu(d_input, d_input, config.batch_size);
+            // Backward pass (Device API - uses activations from forward)
+            model.backward(d_input, d_input, config.batch_size);
 
             // Update weights (using vectorized SGD)
             model.update_weights(config.learning_rate);
@@ -130,9 +130,15 @@ void extract_and_save_features_gpu_v2(
 
     int batch_size = 64;
 
-    // Host buffers only (V2 API uses host pointers)
+    // Host buffers
     float* h_batch = new float[batch_size * input_size];
     float* h_features = new float[batch_size * feature_size];
+    
+    // Device buffers (allocated once, reused)
+    float* d_batch;
+    float* d_features;
+    cudaMalloc(&d_batch, batch_size * input_size * sizeof(float));
+    cudaMalloc(&d_features, batch_size * feature_size * sizeof(float));
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -155,8 +161,14 @@ void extract_and_save_features_gpu_v2(
                    input_size * sizeof(float));
         }
 
-        // Extract features using optimized encoder (host API)
-        model.get_features(h_batch, h_features, current_batch_size);
+        // Copy to device
+        cudaMemcpy(d_batch, h_batch, current_batch_size * input_size * sizeof(float), cudaMemcpyHostToDevice);
+        
+        // Extract features using optimized encoder (device API)
+        model.get_features(d_batch, d_features, current_batch_size);
+        
+        // Copy features back to host
+        cudaMemcpy(h_features, d_features, current_batch_size * feature_size * sizeof(float), cudaMemcpyDeviceToHost);
 
         // Copy to output array
         for (int i = 0; i < current_batch_size; ++i) {
@@ -188,8 +200,14 @@ void extract_and_save_features_gpu_v2(
                    input_size * sizeof(float));
         }
 
-        // Extract features (host API)
-        model.get_features(h_batch, h_features, current_batch_size);
+        // Copy to device
+        cudaMemcpy(d_batch, h_batch, current_batch_size * input_size * sizeof(float), cudaMemcpyHostToDevice);
+        
+        // Extract features (device API)
+        model.get_features(d_batch, d_features, current_batch_size);
+        
+        // Copy features back to host
+        cudaMemcpy(h_features, d_features, current_batch_size * feature_size * sizeof(float), cudaMemcpyDeviceToHost);
 
         for (int i = 0; i < current_batch_size; ++i) {
             memcpy(test_features + (start_idx + i) * feature_size,
@@ -197,6 +215,10 @@ void extract_and_save_features_gpu_v2(
                    feature_size * sizeof(float));
         }
     }
+    
+    // Free device buffers
+    cudaFree(d_batch);
+    cudaFree(d_features);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

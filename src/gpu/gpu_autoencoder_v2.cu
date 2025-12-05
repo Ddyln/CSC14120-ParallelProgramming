@@ -78,8 +78,6 @@ void GPUAutoencoderV2::allocate_activations(int batch_size) {
 
     // Free old allocations if any
     if (max_batch_size > 0) {
-        cudaFree(d_input);
-        cudaFree(d_target);
         cudaFree(d_conv1_out);
         cudaFree(d_pool1_out);
         cudaFree(d_conv2_out);
@@ -92,10 +90,6 @@ void GPUAutoencoderV2::allocate_activations(int batch_size) {
     }
 
     max_batch_size = batch_size;
-
-    // Allocate input/target buffers for host API
-    cudaMalloc(&d_input, batch_size * INPUT_C * INPUT_H * INPUT_W * sizeof(float));
-    cudaMalloc(&d_target, batch_size * INPUT_C * INPUT_H * INPUT_W * sizeof(float));
 
     // Allocate activation buffers
     cudaMalloc(&d_conv1_out, batch_size * CONV1_OUT * CONV1_H * CONV1_W * sizeof(float));
@@ -166,16 +160,6 @@ void GPUAutoencoderV2::free_memory() {
     cudaFree(d_grad_w4); cudaFree(d_grad_b4);
     cudaFree(d_grad_w5); cudaFree(d_grad_b5);
 
-    // Free input/target buffers
-    if (d_input != nullptr) {
-        cudaFree(d_input);
-        d_input = nullptr;
-    }
-    if (d_target != nullptr) {
-        cudaFree(d_target);
-        d_target = nullptr;
-    }
-
     // Free activations
     if (max_batch_size > 0) {
         cudaFree(d_conv1_out);
@@ -204,47 +188,18 @@ void GPUAutoencoderV2::free_memory() {
 }
 
 // ============================================================================
-// FORWARD PASS - Host API (public)
+// FORWARD PASS - Using Fused Kernels
 // ============================================================================
 
-void GPUAutoencoderV2::forward(const float* h_input, float* h_output, int batch_size) {
+void GPUAutoencoderV2::forward(const float* d_input, float* d_output, int batch_size) {
     current_batch_size = batch_size;
-    allocate_activations(batch_size);
-    
-    // Copy input from host to device
-    size_t input_size = batch_size * INPUT_C * INPUT_H * INPUT_W * sizeof(float);
-    cudaMemcpy(d_input, h_input, input_size, cudaMemcpyHostToDevice);
-    
-    // Call device forward
-    forward_device(d_input, d_conv5_out, batch_size);
-    
-    // Copy output from device to host
-    size_t output_size = batch_size * CONV5_OUT * CONV5_H * CONV5_W * sizeof(float);
-    cudaMemcpy(h_output, d_conv5_out, output_size, cudaMemcpyDeviceToHost);
-}
-
-// ============================================================================
-// FORWARD PASS - Device API (public)
-// ============================================================================
-
-void GPUAutoencoderV2::forward_gpu(const float* d_in, float* d_out, int batch_size) {
-    current_batch_size = batch_size;
-    allocate_activations(batch_size);
-    forward_device(d_in, d_out, batch_size);
-}
-
-// ============================================================================
-// FORWARD PASS - Device API (internal)
-// ============================================================================
-
-void GPUAutoencoderV2::forward_device(const float* d_in, float* d_out, int batch_size) {
     allocate_activations(batch_size);
 
     // ENCODER with FUSED kernels (Conv + Bias + ReLU in one kernel)
     
     // Conv1 + Bias + ReLU (FUSED)
     gpu_v2::conv2d_bias_relu_forward_v2(
-        d_in, d_w1, d_b1, d_conv1_out,
+        d_input, d_w1, d_b1, d_conv1_out,
         batch_size, INPUT_C, CONV1_OUT, INPUT_H, INPUT_W, 3, 1, 1
     );
 
@@ -294,28 +249,22 @@ void GPUAutoencoderV2::forward_device(const float* d_in, float* d_out, int batch
 
     // Conv5 + Bias (NO ReLU - final layer)
     gpu_v2::conv2d_bias_forward_v2(
-        d_up2_out, d_w5, d_b5, d_conv5_out,
+        d_up2_out, d_w5, d_b5, d_output,
         batch_size, CONV4_OUT, CONV5_OUT, UP2_H, UP2_W, 3, 1, 1
     );
-
-    // Copy to output if different from d_conv5_out
-    if (d_out != d_conv5_out) {
-        cudaMemcpy(d_out, d_conv5_out, 
-                   batch_size * CONV5_OUT * CONV5_H * CONV5_W * sizeof(float),
-                   cudaMemcpyDeviceToDevice);
-    }
 }
+
 
 // ============================================================================
 // GET FEATURES (Encoder only) - Host API
 // ============================================================================
 
-void GPUAutoencoderV2::get_features(const float* h_input, float* h_features, int batch_size) {
+// ============================================================================
+// GET FEATURES - Extract latent representation (encoder only)
+// ============================================================================
+
+void GPUAutoencoderV2::get_features(const float* d_input, float* d_features, int batch_size) {
     allocate_activations(batch_size);
-    
-    // Copy input from host to device
-    size_t input_size = batch_size * INPUT_C * INPUT_H * INPUT_W * sizeof(float);
-    cudaMemcpy(d_input, h_input, input_size, cudaMemcpyHostToDevice);
 
     // Run encoder only (same as forward but stop at pool2)
     
@@ -335,43 +284,19 @@ void GPUAutoencoderV2::get_features(const float* h_input, float* h_features, int
     );
 
     gpu_v2::maxpool2d_forward_v2(
-        d_conv2_out, d_pool2_out,
+        d_conv2_out, d_features,
         batch_size, CONV2_OUT, CONV2_H, CONV2_W, 2, 2
     );
-
-    // Copy latent features to host
-    cudaMemcpy(h_features, d_pool2_out,
-               batch_size * LATENT_SIZE * sizeof(float),
-               cudaMemcpyDeviceToHost);
 }
 
 // ============================================================================
-// COMPUTE LOSS - Host API
+// COMPUTE LOSS - Device API
 // ============================================================================
 
-float GPUAutoencoderV2::compute_loss(const float* h_output, const float* h_target, int batch_size) {
-    // Allocate temp device buffers if needed
-    float* d_temp_output;
-    float* d_temp_target;
-    size_t size = batch_size * CONV5_OUT * CONV5_H * CONV5_W * sizeof(float);
-    
-    cudaMalloc(&d_temp_output, size);
-    cudaMalloc(&d_temp_target, size);
-    
-    cudaMemcpy(d_temp_output, h_output, size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_temp_target, h_target, size, cudaMemcpyHostToDevice);
-    
-    float loss = gpu_v2::mse_loss_v2(d_temp_output, d_temp_target, batch_size, CONV5_OUT, CONV5_H, CONV5_W);
-    
-    cudaFree(d_temp_output);
-    cudaFree(d_temp_target);
-    
-    return loss;
-}
-
-float GPUAutoencoderV2::compute_loss_gpu(const float* d_output, const float* d_target, int batch_size) {
+float GPUAutoencoderV2::compute_loss(const float* d_output, const float* d_target, int batch_size) {
     return gpu_v2::mse_loss_v2(d_output, d_target, batch_size, CONV5_OUT, CONV5_H, CONV5_W);
 }
+
 
 // ============================================================================
 // BACKWARD PASS - Complete GPU implementation
@@ -432,31 +357,15 @@ __global__ void conv2d_backward_data_v2(
     grad_input[ic * height * width + ih * width + iw] = sum;
 }
 
-void GPUAutoencoderV2::backward(const float* h_input, const float* h_target, int batch_size) {
+// ============================================================================
+// BACKWARD PASS - Device API
+// ============================================================================
+
+void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int batch_size) {
     current_batch_size = batch_size;
     allocate_activations(batch_size);
     allocate_gradients(batch_size);
     
-    // Copy input and target from host to device
-    size_t data_size = batch_size * INPUT_C * INPUT_H * INPUT_W * sizeof(float);
-    cudaMemcpy(d_input, h_input, data_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_target, h_target, data_size, cudaMemcpyHostToDevice);
-    
-    // Run forward pass to compute activations (needed for backward)
-    forward_device(d_input, d_conv5_out, batch_size);
-    
-    // Call device backward
-    backward_device(d_input, d_target, batch_size);
-}
-
-void GPUAutoencoderV2::backward_gpu(const float* d_in, const float* d_tgt, int batch_size) {
-    current_batch_size = batch_size;
-    allocate_activations(batch_size);
-    allocate_gradients(batch_size);
-    backward_device(d_in, d_tgt, batch_size);
-}
-
-void GPUAutoencoderV2::backward_device(const float* d_in, const float* d_tgt, int batch_size) {
     // Zero weight gradients
     cudaMemset(d_grad_w1, 0, W1_SIZE * sizeof(float));
     cudaMemset(d_grad_b1, 0, B1_SIZE * sizeof(float));
@@ -477,7 +386,7 @@ void GPUAutoencoderV2::backward_device(const float* d_in, const float* d_tgt, in
     // ========================================================================
     dim3 block(256);
     dim3 grid((output_size + 255) / 256);
-    mse_gradient_kernel_v2<<<grid, block>>>(d_conv5_out, d_tgt, d_grad_conv5, scale, output_size);
+    mse_gradient_kernel_v2<<<grid, block>>>(d_conv5_out, d_target, d_grad_conv5, scale, output_size);
 
     dim3 spatial_block(16, 16);
     dim3 wgrad_block(9);  // 3x3 kernel
