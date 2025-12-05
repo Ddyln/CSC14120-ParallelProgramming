@@ -400,8 +400,7 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
 
     // Backward through Conv5 (no ReLU)
     for (int b = 0; b < batch_size; ++b) {
-        dim3 wgrad_grid5(CONV4_OUT, CONV5_OUT);
-        gpu_v2::conv2d_weight_grad_optimized_kernel<<<wgrad_grid5, wgrad_block>>>(
+        gpu_v2::conv2d_weight_grad_optimized_kernel(
             d_up2_out + b * CONV4_OUT * UP2_H * UP2_W,
             d_grad_conv5 + b * CONV5_OUT * CONV5_H * CONV5_W,
             d_grad_w5, CONV4_OUT, CONV5_OUT, UP2_H, UP2_W, 3, 1
@@ -414,14 +413,13 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
             CONV4_OUT, CONV5_OUT, UP2_H, UP2_W, 3, 1
         );
     }
-    gpu_v2::bias_grad_optimized_kernel<<<CONV5_OUT, 256, 256 * sizeof(float)>>>(
+    gpu_v2::bias_grad_optimized_kernel(
         d_grad_conv5, d_grad_b5, CONV5_OUT, CONV5_H * batch_size, CONV5_W
     );
 
     // Backward through Upsample2
     for (int b = 0; b < batch_size; ++b) {
-        dim3 up_grid2((CONV4_W + 15) / 16, (CONV4_H + 15) / 16, CONV4_OUT);
-        gpu_v2::upsample2d_backward_optimized_kernel<<<up_grid2, spatial_block>>>(
+        gpu_v2::upsample2d_backward_optimized_kernel(
             d_grad_up2 + b * CONV4_OUT * UP2_H * UP2_W,
             d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
             CONV4_OUT, CONV4_H, CONV4_W, UP2_H, UP2_W, 2
@@ -430,8 +428,7 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
 
     // Backward through Conv4 + ReLU (FUSED)
     for (int b = 0; b < batch_size; ++b) {
-        dim3 data_grid4((UP1_W + 15) / 16, (UP1_H + 15) / 16, CONV3_OUT);
-        gpu_v2::conv2d_relu_backward_fused_kernel<<<data_grid4, spatial_block>>>(
+        gpu_v2::conv2d_relu_backward_fused_kernel(
             d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
             d_up1_out + b * CONV3_OUT * UP1_H * UP1_W,
             d_w4, d_conv4_out + b * CONV4_OUT * CONV4_H * CONV4_W,
@@ -439,21 +436,19 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
             CONV3_OUT, CONV4_OUT, UP1_H, UP1_W, 3, 1
         );
         
-        dim3 wgrad_grid4(CONV3_OUT, CONV4_OUT);
-        gpu_v2::conv2d_weight_grad_optimized_kernel<<<wgrad_grid4, wgrad_block>>>(
+        gpu_v2::conv2d_weight_grad_optimized_kernel(
             d_up1_out + b * CONV3_OUT * UP1_H * UP1_W,
             d_grad_conv4 + b * CONV4_OUT * CONV4_H * CONV4_W,
             d_grad_w4, CONV3_OUT, CONV4_OUT, UP1_H, UP1_W, 3, 1
         );
     }
-    gpu_v2::bias_grad_optimized_kernel<<<CONV4_OUT, 256, 256 * sizeof(float)>>>(
+    gpu_v2::bias_grad_optimized_kernel(
         d_grad_conv4, d_grad_b4, CONV4_OUT, CONV4_H * batch_size, CONV4_W
     );
 
     // Backward through Upsample1
     for (int b = 0; b < batch_size; ++b) {
-        dim3 up_grid1((CONV3_W + 15) / 16, (CONV3_H + 15) / 16, CONV3_OUT);
-        gpu_v2::upsample2d_backward_optimized_kernel<<<up_grid1, spatial_block>>>(
+        gpu_v2::upsample2d_backward_optimized_kernel(
             d_grad_up1 + b * CONV3_OUT * UP1_H * UP1_W,
             d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
             CONV3_OUT, CONV3_H, CONV3_W, UP1_H, UP1_W, 2
@@ -462,8 +457,7 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
 
     // Backward through Conv3 + ReLU (FUSED)
     for (int b = 0; b < batch_size; ++b) {
-        dim3 data_grid3((POOL2_W + 15) / 16, (POOL2_H + 15) / 16, CONV2_OUT);
-        gpu_v2::conv2d_relu_backward_fused_kernel<<<data_grid3, spatial_block>>>(
+        gpu_v2::conv2d_relu_backward_fused_kernel(
             d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
             d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
             d_w3, d_conv3_out + b * CONV3_OUT * CONV3_H * CONV3_W,
@@ -471,21 +465,19 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
             CONV2_OUT, CONV3_OUT, POOL2_H, POOL2_W, 3, 1
         );
         
-        dim3 wgrad_grid3(CONV2_OUT, CONV3_OUT);
-        gpu_v2::conv2d_weight_grad_optimized_kernel<<<wgrad_grid3, wgrad_block>>>(
+        gpu_v2::conv2d_weight_grad_optimized_kernel(
             d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
             d_grad_conv3 + b * CONV3_OUT * CONV3_H * CONV3_W,
             d_grad_w3, CONV2_OUT, CONV3_OUT, POOL2_H, POOL2_W, 3, 1
         );
     }
-    gpu_v2::bias_grad_optimized_kernel<<<CONV3_OUT, 256, 256 * sizeof(float)>>>(
+    gpu_v2::bias_grad_optimized_kernel(
         d_grad_conv3, d_grad_b3, CONV3_OUT, CONV3_H * batch_size, CONV3_W
     );
 
     // Backward through MaxPool2
     for (int b = 0; b < batch_size; ++b) {
-        dim3 pool_grid2((CONV2_W + 15) / 16, (CONV2_H + 15) / 16, CONV2_OUT);
-        gpu_v2::maxpool2d_backward_optimized_kernel<<<pool_grid2, spatial_block>>>(
+        gpu_v2::maxpool2d_backward_optimized_kernel(
             d_grad_pool2 + b * CONV2_OUT * POOL2_H * POOL2_W,
             d_conv2_out + b * CONV2_OUT * CONV2_H * CONV2_W,
             d_pool2_out + b * CONV2_OUT * POOL2_H * POOL2_W,
@@ -496,8 +488,7 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
 
     // Backward through Conv2 + ReLU (FUSED)
     for (int b = 0; b < batch_size; ++b) {
-        dim3 data_grid2((POOL1_W + 15) / 16, (POOL1_H + 15) / 16, CONV1_OUT);
-        gpu_v2::conv2d_relu_backward_fused_kernel<<<data_grid2, spatial_block>>>(
+        gpu_v2::conv2d_relu_backward_fused_kernel(
             d_grad_conv2 + b * CONV2_OUT * CONV2_H * CONV2_W,
             d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
             d_w2, d_conv2_out + b * CONV2_OUT * CONV2_H * CONV2_W,
@@ -505,21 +496,19 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
             CONV1_OUT, CONV2_OUT, POOL1_H, POOL1_W, 3, 1
         );
         
-        dim3 wgrad_grid2(CONV1_OUT, CONV2_OUT);
-        gpu_v2::conv2d_weight_grad_optimized_kernel<<<wgrad_grid2, wgrad_block>>>(
+        gpu_v2::conv2d_weight_grad_optimized_kernel(
             d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
             d_grad_conv2 + b * CONV2_OUT * CONV2_H * CONV2_W,
             d_grad_w2, CONV1_OUT, CONV2_OUT, POOL1_H, POOL1_W, 3, 1
         );
     }
-    gpu_v2::bias_grad_optimized_kernel<<<CONV2_OUT, 256, 256 * sizeof(float)>>>(
+    gpu_v2::bias_grad_optimized_kernel(
         d_grad_conv2, d_grad_b2, CONV2_OUT, CONV2_H * batch_size, CONV2_W
     );
 
     // Backward through MaxPool1
     for (int b = 0; b < batch_size; ++b) {
-        dim3 pool_grid1((CONV1_W + 15) / 16, (CONV1_H + 15) / 16, CONV1_OUT);
-        gpu_v2::maxpool2d_backward_optimized_kernel<<<pool_grid1, spatial_block>>>(
+        gpu_v2::maxpool2d_backward_optimized_kernel(
             d_grad_pool1 + b * CONV1_OUT * POOL1_H * POOL1_W,
             d_conv1_out + b * CONV1_OUT * CONV1_H * CONV1_W,
             d_pool1_out + b * CONV1_OUT * POOL1_H * POOL1_W,
@@ -530,14 +519,13 @@ void GPUAutoencoderV2::backward(const float* d_input, const float* d_target, int
 
     // Backward through Conv1 + ReLU (weights only)
     for (int b = 0; b < batch_size; ++b) {
-        dim3 wgrad_grid1(INPUT_C, CONV1_OUT);
-        gpu_v2::conv2d_weight_grad_optimized_kernel<<<wgrad_grid1, wgrad_block>>>(
+        gpu_v2::conv2d_weight_grad_optimized_kernel(
             d_input + b * INPUT_C * INPUT_H * INPUT_W,
             d_grad_conv1 + b * CONV1_OUT * CONV1_H * CONV1_W,
             d_grad_w1, INPUT_C, CONV1_OUT, INPUT_H, INPUT_W, 3, 1
         );
     }
-    gpu_v2::bias_grad_optimized_kernel<<<CONV1_OUT, 256, 256 * sizeof(float)>>>(
+    gpu_v2::bias_grad_optimized_kernel(
         d_grad_conv1, d_grad_b1, CONV1_OUT, CONV1_H * batch_size, CONV1_W
     );
 
