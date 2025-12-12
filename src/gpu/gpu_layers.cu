@@ -373,14 +373,34 @@ __global__ void mse_loss_gradient_kernel(
 __global__ void mse_loss_kernel(
     const float* output,
     const float* target,
-    float* partial_sum,
+    float* partial_sums,
     int size
 ) {
+    extern __shared__ float sdata[];
+
+    int tid = threadIdx.x;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Load and compute squared difference
+    float val = 0.0f;
     if (idx < size) {
         float diff = output[idx] - target[idx];
-        float val = diff * diff;
-        atomicAdd(partial_sum, val);
+        val = diff * diff;
+    }
+    sdata[tid] = val;
+    __syncthreads();
+
+    // Reduction in shared memory
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    // Write block result to global memory
+    if (tid == 0) {
+        partial_sums[blockIdx.x] = sdata[0];
     }
 }
 
@@ -593,22 +613,29 @@ float gpu_mse_loss(const float* d_output, const float* d_target, int size) {
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
 
-    // Single global accumulator to avoid shared memory
-    float* d_partial_sum;
-    CUDA_CHECK(cudaMalloc(&d_partial_sum, sizeof(float)));
-    CUDA_CHECK(cudaMemset(d_partial_sum, 0, sizeof(float)));
+    // Allocate memory for partial sums
+    float* d_partial_sums;
+    CUDA_CHECK(cudaMalloc(&d_partial_sums, grid_size * sizeof(float)));
 
-    mse_loss_kernel<<<grid_size, block_size>>>(
-        d_output, d_target, d_partial_sum, size
+    // Launch kernel
+    mse_loss_kernel<<<grid_size, block_size, block_size * sizeof(float)>>>(
+        d_output, d_target, d_partial_sums, size
     );
     CUDA_CHECK(cudaGetLastError());
 
-    float h_total = 0.0f;
-    CUDA_CHECK(cudaMemcpy(&h_total, d_partial_sum, sizeof(float), cudaMemcpyDeviceToHost));
+    // Copy partial sums to host and reduce
+    float* h_partial_sums = new float[grid_size];
+    CUDA_CHECK(cudaMemcpy(h_partial_sums, d_partial_sums, grid_size * sizeof(float), cudaMemcpyDeviceToHost));
 
-    CUDA_CHECK(cudaFree(d_partial_sum));
+    float total_loss = 0.0f;
+    for (int i = 0; i < grid_size; i++) {
+        total_loss += h_partial_sums[i];
+    }
 
-    return h_total / size;
+    delete[] h_partial_sums;
+    CUDA_CHECK(cudaFree(d_partial_sums));
+
+    return total_loss / size;
 }
 
 void gpu_mse_loss_gradient(

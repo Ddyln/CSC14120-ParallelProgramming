@@ -4,19 +4,8 @@
 #include <stdio.h>
 
 #include <chrono>
-// #include <sys/stat.h>
-// #include <sys/types.h>
 
 #include "gpu/gpu_layers.cuh"
-// 
-// // Helper function to create directories
-// static void create_directory(const char* path) {
-//     #ifdef _WIN32
-//         mkdir(path);
-//     #else
-//         mkdir(path, 0755);
-//     #endif
-// }
 
 void train_gpu_autoencoder(
     GPUAutoencoder& model,
@@ -143,9 +132,6 @@ void train_gpu_autoencoder(
     printf("Training Complete!\n");
     printf("Total training time: %ld seconds\n", total_duration.count());
     printf("========================================\n");
-    //
-    // // Create output directory if it doesn't exist
-    // create_directory(output_folder);
 
     // Save model weights
     printf("\nSaving GPU model weights...\n");
@@ -167,9 +153,6 @@ void extract_and_save_features_gpu(
     printf("\n========================================\n");
     printf("GPU Feature Extraction\n");
     printf("========================================\n");
-    //
-    // // Create output directory if it doesn't exist
-    // create_directory(output_folder);
 
     const int feature_size = 8 * 8 * 128;  // 8192
     const int batch_size = 64;
