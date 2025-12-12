@@ -1,4 +1,4 @@
-#include "layers.h"
+#include "cpu/layers.h"
 
 #include <cmath>
 #include <cstring>

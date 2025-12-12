@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-#include "gpu_info.h"
+#include "common/gpu_info.h"
 
 void gpu_info::print() {
     int device;

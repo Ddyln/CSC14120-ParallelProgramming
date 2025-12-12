@@ -1,9 +1,9 @@
-#include "trainer.h"
+#include "cpu/trainer.h"
 
 #include <chrono>
 #include <cstdio>
 
-#include "layers.h"
+#include "cpu/layers.h"
 
 void train_autoencoder(
     Autoencoder& model,

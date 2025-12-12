@@ -1,4 +1,4 @@
-#include "feature_extractor.h"
+#include "cpu/feature_extractor.h"
 
 #include <cstdio>
 

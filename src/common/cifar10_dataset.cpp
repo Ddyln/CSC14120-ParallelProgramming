@@ -1,4 +1,4 @@
-#include "cifar10_dataset.h"
+#include "common/cifar10_dataset.h"
 
 #include <algorithm>
 #include <fstream>
