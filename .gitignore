@@ -3,3 +3,8 @@ data/
 .cache/
 output/
 .venv/
+GPU2_*.md
+RUN_GUIDE.md
+output_v2/
+OPTIMIZATION_SUMMARY.txt
+README_GPU2_V2.1.md

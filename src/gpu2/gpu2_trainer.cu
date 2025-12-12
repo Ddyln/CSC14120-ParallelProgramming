@@ -1,31 +1,35 @@
-#include "gpu/gpu_trainer.h"
+#include "gpu2/gpu2_trainer.h"
 
 #include <cuda_runtime.h>
 #include <stdio.h>
 
 #include <chrono>
-// #include <sys/stat.h>
-// #include <sys/types.h>
 
-#include "gpu/gpu_layers.cuh"
-// 
-// // Helper function to create directories
-// static void create_directory(const char* path) {
-//     #ifdef _WIN32
-//         mkdir(path);
-//     #else
-//         mkdir(path, 0755);
-//     #endif
-// }
+#include "common/cifar10_dataset.h"
 
-void train_gpu_autoencoder(
-    GPUAutoencoder& model,
+// CUDA error checking macro
+#define CUDA_CHECK(call)                                                         \
+    do {                                                                         \
+        cudaError_t err = call;                                                  \
+        if (err != cudaSuccess) {                                                \
+            fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,     \
+                    cudaGetErrorString(err));                                    \
+            exit(EXIT_FAILURE);                                                  \
+        }                                                                        \
+    } while (0)
+
+void train_gpu2_autoencoder(
+    GPU2Autoencoder& model,
     CIFAR10Dataset& dataset,
-    const GPUTrainConfig& config,
+    const GPU2TrainConfig& config,
     const char* output_folder
 ) {
     printf("\n========================================\n");
-    printf("GPU Autoencoder Training (Baseline)\n");
+    printf("GPU2 Autoencoder Training (Optimized v2)\n");
+    printf("Optimizations:\n");
+    printf("- Constant Memory for Biases\n");
+    printf("- Pinned Host Memory\n");
+    printf("- Multi-Stream Pipeline (%d streams)\n", config.num_streams);
     printf("========================================\n");
     printf("Batch size: %d\n", config.batch_size);
     printf("Epochs: %d\n", config.epochs);
@@ -36,8 +40,9 @@ void train_gpu_autoencoder(
     const size_t num_batches = dataset.train_size() / config.batch_size;
     const size_t output_size = config.batch_size * 3 * 32 * 32;
 
-    // Allocate host output buffer
-    float* h_output = new float[output_size];
+    // Allocate host output buffer (pinned memory)
+    float* h_output;
+    CUDA_CHECK(cudaMallocHost(&h_output, output_size * sizeof(float)));
 
     // Create CUDA events for timing
     cudaEvent_t start, stop;
@@ -47,6 +52,9 @@ void train_gpu_autoencoder(
     auto total_start = std::chrono::high_resolution_clock::now();
 
     for (int epoch = 0; epoch < config.epochs; epoch++) {
+        printf("Epoch %d/%d...\n", epoch + 1, config.epochs);
+        fflush(stdout);
+        
         auto epoch_start = std::chrono::high_resolution_clock::now();
         
         // Shuffle training data at the start of each epoch
@@ -64,7 +72,7 @@ void train_gpu_autoencoder(
             const float* batch_images = batch_data.first.data();
 
             // ================================================================
-            // Forward Pass (GPU)
+            // Forward Pass (GPU with Async Transfers)
             // ================================================================
             cudaEventRecord(start);
             
@@ -77,17 +85,16 @@ void train_gpu_autoencoder(
             epoch_forward_time += forward_ms;
 
             // ================================================================
-            // Compute Loss (target = input for autoencoder)
+            // Compute Loss
             // ================================================================
             float batch_loss = model.compute_loss(batch_images, config.batch_size);
             epoch_loss += batch_loss;
 
             // ================================================================
-            // Backward Pass (GPU)
+            // Backward Pass (GPU with Async Transfers)
             // ================================================================
             cudaEventRecord(start);
             
-            // For autoencoder, target = input
             model.backward(batch_images, batch_images, config.batch_size);
             
             cudaEventRecord(stop);
@@ -126,8 +133,7 @@ void train_gpu_autoencoder(
         );
 
         float avg_loss = epoch_loss / num_batches;
-        printf("Epoch %d/%d Complete - Avg Loss: %.6f - Time: %ld ms "
-               "(Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
+        printf("Epoch %d/%d Complete - Avg Loss: %.6f - Time: %ld ms (Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
                epoch + 1, config.epochs,
                avg_loss,
                epoch_duration.count(),
@@ -143,41 +149,39 @@ void train_gpu_autoencoder(
     printf("Training Complete!\n");
     printf("Total training time: %ld seconds\n", total_duration.count());
     printf("========================================\n");
-    //
-    // // Create output directory if it doesn't exist
-    // create_directory(output_folder);
 
     // Save model weights
-    printf("\nSaving GPU model weights...\n");
+    printf("\nSaving GPU2 model weights...\n");
     char model_path[512];
-    snprintf(model_path, sizeof(model_path), "%s/gpu_autoencoder_weights.bin", output_folder);
+    snprintf(model_path, sizeof(model_path), "%s/gpu2_autoencoder_weights.bin", output_folder);
     model.save_weights(model_path);
 
     // Cleanup
-    delete[] h_output;
+    CUDA_CHECK(cudaFreeHost(h_output));
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 }
 
-void extract_and_save_features_gpu(
-    GPUAutoencoder& model,
+void extract_and_save_features_gpu2(
+    GPU2Autoencoder& model,
     CIFAR10Dataset& dataset,
     const char* output_folder
 ) {
     printf("\n========================================\n");
-    printf("GPU Feature Extraction\n");
+    printf("GPU2 Feature Extraction\n");
     printf("========================================\n");
-    //
-    // // Create output directory if it doesn't exist
-    // create_directory(output_folder);
 
     const int feature_size = 8 * 8 * 128;  // 8192
     const int batch_size = 64;
 
-    // Allocate feature buffers
-    float* train_features = new float[dataset.train_size() * feature_size];
-    float* test_features = new float[dataset.test_size() * feature_size];
-    float* batch_features = new float[batch_size * feature_size];
+    // Allocate feature buffers (pinned memory for faster transfers)
+    float* train_features;
+    float* test_features;
+    float* batch_features;
+    
+    CUDA_CHECK(cudaMallocHost(&train_features, dataset.train_size() * feature_size * sizeof(float)));
+    CUDA_CHECK(cudaMallocHost(&test_features, dataset.test_size() * feature_size * sizeof(float)));
+    CUDA_CHECK(cudaMallocHost(&batch_features, batch_size * feature_size * sizeof(float)));
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -198,124 +202,84 @@ void extract_and_save_features_gpu(
                batch_features,
                batch_size * feature_size * sizeof(float));
 
-        if ((i + 1) % 100 == 0) {
-            printf("  Processed %zu/%zu batches\n", i + 1, num_train_batches);
+        if ((i + 1) % 10 == 0) {
+            printf("  Extracted %zu/%zu training batches\n", i + 1, num_train_batches);
         }
     }
 
-    // Handle remaining training images
+    // Handle remaining training samples
     if (train_remaining > 0) {
-        for (size_t i = 0; i < train_remaining; i++) {
-            size_t idx = num_train_batches * batch_size + i;
-            float* img = dataset.get_train_image(idx);
-            float single_feature[8192];
-            model.extract_features(img, single_feature, 1);
-            memcpy(train_features + idx * feature_size,
-                   single_feature,
-                   feature_size * sizeof(float));
-        }
+        auto batch_data = dataset.next_train_batch(train_remaining);
+        const float* batch_images = batch_data.first.data();
+        
+        model.extract_features(batch_images, batch_features, train_remaining);
+        
+        memcpy(train_features + num_train_batches * batch_size * feature_size,
+               batch_features,
+               train_remaining * feature_size * sizeof(float));
+        printf("  Extracted remaining %zu training samples\n", train_remaining);
     }
-
-    auto train_end = std::chrono::high_resolution_clock::now();
-    auto train_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        train_end - start
-    );
-    printf("Training feature extraction: %ld ms\n", train_duration.count());
 
     // Extract test features
     printf("Extracting test features (%zu images)...\n", dataset.test_size());
+    const std::vector<float>& test_images = dataset.test_images();
     size_t num_test_batches = dataset.test_size() / batch_size;
     size_t test_remaining = dataset.test_size() % batch_size;
 
     for (size_t i = 0; i < num_test_batches; i++) {
-        // Get batch of test images
-        float* batch_images = new float[batch_size * 3 * 32 * 32];
-        for (int j = 0; j < batch_size; j++) {
-            memcpy(batch_images + j * 3 * 32 * 32,
-                   dataset.get_test_image(i * batch_size + j),
-                   3 * 32 * 32 * sizeof(float));
-        }
+        const float* batch_images = &test_images[i * batch_size * CIFAR10_IMAGE_SIZE];
         
         model.extract_features(batch_images, batch_features, batch_size);
         
+        // Copy to output buffer
         memcpy(test_features + i * batch_size * feature_size,
                batch_features,
                batch_size * feature_size * sizeof(float));
 
-        delete[] batch_images;
-
-        if ((i + 1) % 25 == 0) {
-            printf("  Processed %zu/%zu batches\n", i + 1, num_test_batches);
+        if ((i + 1) % 10 == 0) {
+            printf("  Extracted %zu/%zu test batches\n", i + 1, num_test_batches);
         }
     }
 
-    // Handle remaining test images
+    // Handle remaining test samples
     if (test_remaining > 0) {
-        for (size_t i = 0; i < test_remaining; i++) {
-            size_t idx = num_test_batches * batch_size + i;
-            float* img = dataset.get_test_image(idx);
-            float single_feature[8192];
-            model.extract_features(img, single_feature, 1);
-            memcpy(test_features + idx * feature_size,
-                   single_feature,
-                   feature_size * sizeof(float));
-        }
+        const float* batch_images = &test_images[num_test_batches * batch_size * CIFAR10_IMAGE_SIZE];
+        
+        model.extract_features(batch_images, batch_features, test_remaining);
+        
+        memcpy(test_features + num_test_batches * batch_size * feature_size,
+               batch_features,
+               test_remaining * feature_size * sizeof(float));
+        printf("  Extracted remaining %zu test samples\n", test_remaining);
     }
 
-    auto test_end = std::chrono::high_resolution_clock::now();
-    auto test_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        test_end - train_end
-    );
-    printf("Test feature extraction: %ld ms\n", test_duration.count());
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     // Save features
-    char train_path[512], test_path[512];
-    char train_labels_path[512], test_labels_path[512];
+    printf("\nSaving features to binary files...\n");
     
-    snprintf(train_path, sizeof(train_path), "%s/gpu_train_features.bin", output_folder);
-    snprintf(test_path, sizeof(test_path), "%s/gpu_test_features.bin", output_folder);
-    snprintf(train_labels_path, sizeof(train_labels_path), "%s/train_labels.bin", output_folder);
-    snprintf(test_labels_path, sizeof(test_labels_path), "%s/test_labels.bin", output_folder);
-
-    // Save train features
-    FILE* f_train = fopen(train_path, "wb");
-    if (f_train) {
-        fwrite(train_features, sizeof(float), dataset.train_size() * feature_size, f_train);
-        fclose(f_train);
-        printf("Saved training features to: %s\n", train_path);
+    FILE* train_file = fopen("train_features_gpu2.bin", "wb");
+    if (train_file) {
+        fwrite(train_features, sizeof(float), dataset.train_size() * feature_size, train_file);
+        fclose(train_file);
+        printf("Training features saved to: train_features_gpu2.bin\n");
     }
 
-    // Save test features
-    FILE* f_test = fopen(test_path, "wb");
-    if (f_test) {
-        fwrite(test_features, sizeof(float), dataset.test_size() * feature_size, f_test);
-        fclose(f_test);
-        printf("Saved test features to: %s\n", test_path);
+    FILE* test_file = fopen("test_features_gpu2.bin", "wb");
+    if (test_file) {
+        fwrite(test_features, sizeof(float), dataset.test_size() * feature_size, test_file);
+        fclose(test_file);
+        printf("Test features saved to: test_features_gpu2.bin\n");
     }
 
-    // Save labels
-    FILE* f_train_labels = fopen(train_labels_path, "wb");
-    if (f_train_labels) {
-        fwrite(dataset.train_labels().data(), sizeof(uint8_t), dataset.train_size(), f_train_labels);
-        fclose(f_train_labels);
-        printf("Saved training labels to: %s\n", train_labels_path);
-    }
-
-    FILE* f_test_labels = fopen(test_labels_path, "wb");
-    if (f_test_labels) {
-        fwrite(dataset.test_labels().data(), sizeof(uint8_t), dataset.test_size(), f_test_labels);
-        fclose(f_test_labels);
-        printf("Saved test labels to: %s\n", test_labels_path);
-    }
-
-    auto total_end = std::chrono::high_resolution_clock::now();
-    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        total_end - start
-    );
-    printf("\nTotal feature extraction time: %ld ms\n", total_duration.count());
+    printf("\n========================================\n");
+    printf("Feature extraction complete!\n");
+    printf("Total extraction time: %ld ms\n", duration.count());
     printf("========================================\n");
 
-    delete[] train_features;
-    delete[] test_features;
-    delete[] batch_features;
+    // Cleanup
+    CUDA_CHECK(cudaFreeHost(train_features));
+    CUDA_CHECK(cudaFreeHost(test_features));
+    CUDA_CHECK(cudaFreeHost(batch_features));
 }

@@ -13,14 +13,15 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 file(GLOB COMMON_SOURCES src/common/*.cu src/common/*.cpp)
 file(GLOB CPU_SOURCES src/cpu/*.cpp)
 file(GLOB GPU_SOURCES src/gpu/*.cu)
+file(GLOB GPU2_SOURCES src/gpu2/*.cu)
 set(MAIN_SOURCE src/main.cu)
-set(SOURCES ${COMMON_SOURCES} ${CPU_SOURCES} ${GPU_SOURCES} ${MAIN_SOURCE})
+set(SOURCES ${COMMON_SOURCES} ${CPU_SOURCES} ${GPU_SOURCES} ${GPU2_SOURCES} ${MAIN_SOURCE})
 
 # Generate compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Set CUDA architectures (Pascal=61, Turing=75, Ampere=86)
-set(CMAKE_CUDA_ARCHITECTURES 61 75 86)
+set(CMAKE_CUDA_ARCHITECTURES 75 86)
 
 # Create executable
 add_executable(extract_features ${SOURCES})
