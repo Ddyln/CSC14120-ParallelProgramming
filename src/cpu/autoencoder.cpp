@@ -351,17 +351,22 @@ void Autoencoder::load_weights(const std::string& filepath) {
     FILE* f = fopen(filepath.c_str(), "rb");
     if (!f) return;
 
-    // Read weights and biases
-    fread(w1, sizeof(float), 256 * 3 * 3 * 3, f);
-    fread(b1, sizeof(float), 256, f);
-    fread(w2, sizeof(float), 128 * 256 * 3 * 3, f);
-    fread(b2, sizeof(float), 128, f);
-    fread(w3, sizeof(float), 128 * 128 * 3 * 3, f);
-    fread(b3, sizeof(float), 128, f);
-    fread(w4, sizeof(float), 256 * 128 * 3 * 3, f);
-    fread(b4, sizeof(float), 256, f);
-    fread(w5, sizeof(float), 3 * 256 * 3 * 3, f);
-    fread(b5, sizeof(float), 3, f);
+    // Read weights and biases with proper error checking
+    size_t read_count = 0;
+    read_count += fread(w1, sizeof(float), 256 * 3 * 3 * 3, f);
+    read_count += fread(b1, sizeof(float), 256, f);
+    read_count += fread(w2, sizeof(float), 128 * 256 * 3 * 3, f);
+    read_count += fread(b2, sizeof(float), 128, f);
+    read_count += fread(w3, sizeof(float), 128 * 128 * 3 * 3, f);
+    read_count += fread(b3, sizeof(float), 128, f);
+    read_count += fread(w4, sizeof(float), 256 * 128 * 3 * 3, f);
+    read_count += fread(b4, sizeof(float), 256, f);
+    read_count += fread(w5, sizeof(float), 3 * 256 * 3 * 3, f);
+    read_count += fread(b5, sizeof(float), 3, f);
+    
+    if (read_count == 0) {
+        fprintf(stderr, "Warning: No data read from weights file\n");
+    }
 
     fclose(f);
 }
