@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include <chrono>
+#include <cstring>
 
 void train_gpu1_autoencoder(
     GPU1Autoencoder& model,
@@ -12,7 +13,7 @@ void train_gpu1_autoencoder(
     const char* output_folder
 ) {
     printf("\n========================================\n");
-    printf("GPU Autoencoder Training (v1 - const memory)\n");
+    printf("GPU Autoencoder Training (v1 - fused conv + shared memory)\n");
     printf("========================================\n");
     printf("Batch size: %d\n", config.batch_size);
     printf("Epochs: %d\n", config.epochs);

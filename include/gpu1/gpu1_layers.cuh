@@ -2,6 +2,8 @@
 #define GPU1_LAYERS_CUH
 
 #include <cuda_runtime.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "gpu/gpu_layers.cuh"  // reuse baseline kernels and wrappers
 
