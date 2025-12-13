@@ -374,16 +374,27 @@ void GPU1Autoencoder::load_weights(const std::string& filepath) {
         allocate_host_memory();
     }
 
-    fread(h_w1, sizeof(float), W1_SIZE_1, f);
-    fread(h_b1, sizeof(float), B1_SIZE_1, f);
-    fread(h_w2, sizeof(float), W2_SIZE_1, f);
-    fread(h_b2, sizeof(float), B2_SIZE_1, f);
-    fread(h_w3, sizeof(float), W3_SIZE_1, f);
-    fread(h_b3, sizeof(float), B3_SIZE_1, f);
-    fread(h_w4, sizeof(float), W4_SIZE_1, f);
-    fread(h_b4, sizeof(float), B4_SIZE_1, f);
-    fread(h_w5, sizeof(float), W5_SIZE_1, f);
-    fread(h_b5, sizeof(float), B5_SIZE_1, f);
+    size_t got = 0;
+    got = fread(h_w1, sizeof(float), W1_SIZE_1, f);
+    if (got != (size_t)W1_SIZE_1) { fprintf(stderr, "Failed reading W1\n"); fclose(f); return; }
+    got = fread(h_b1, sizeof(float), B1_SIZE_1, f);
+    if (got != (size_t)B1_SIZE_1) { fprintf(stderr, "Failed reading B1\n"); fclose(f); return; }
+    got = fread(h_w2, sizeof(float), W2_SIZE_1, f);
+    if (got != (size_t)W2_SIZE_1) { fprintf(stderr, "Failed reading W2\n"); fclose(f); return; }
+    got = fread(h_b2, sizeof(float), B2_SIZE_1, f);
+    if (got != (size_t)B2_SIZE_1) { fprintf(stderr, "Failed reading B2\n"); fclose(f); return; }
+    got = fread(h_w3, sizeof(float), W3_SIZE_1, f);
+    if (got != (size_t)W3_SIZE_1) { fprintf(stderr, "Failed reading W3\n"); fclose(f); return; }
+    got = fread(h_b3, sizeof(float), B3_SIZE_1, f);
+    if (got != (size_t)B3_SIZE_1) { fprintf(stderr, "Failed reading B3\n"); fclose(f); return; }
+    got = fread(h_w4, sizeof(float), W4_SIZE_1, f);
+    if (got != (size_t)W4_SIZE_1) { fprintf(stderr, "Failed reading W4\n"); fclose(f); return; }
+    got = fread(h_b4, sizeof(float), B4_SIZE_1, f);
+    if (got != (size_t)B4_SIZE_1) { fprintf(stderr, "Failed reading B4\n"); fclose(f); return; }
+    got = fread(h_w5, sizeof(float), W5_SIZE_1, f);
+    if (got != (size_t)W5_SIZE_1) { fprintf(stderr, "Failed reading W5\n"); fclose(f); return; }
+    got = fread(h_b5, sizeof(float), B5_SIZE_1, f);
+    if (got != (size_t)B5_SIZE_1) { fprintf(stderr, "Failed reading B5\n"); fclose(f); return; }
 
     fclose(f);
 
@@ -391,7 +402,6 @@ void GPU1Autoencoder::load_weights(const std::string& filepath) {
         allocate_device_memory(max_batch_size);
     }
     copy_weights_to_device();
-    copy_biases_to_const_memory();
 
     printf("GPU1 model weights loaded from: %s\n", filepath.c_str());
 }
