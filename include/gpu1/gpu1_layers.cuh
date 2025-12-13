@@ -38,11 +38,15 @@ inline void gpu1_conv2d_relu_forward(
     const int TILE_W = 8;
     const int TILE_H = 8;
 
+    const int tiles_x = (width  + TILE_W - 1) / TILE_W;
+    const int tiles_y = (height + TILE_H - 1) / TILE_H;
+
     dim3 blockDim(TILE_W, TILE_H);
+    // Fold batch dimension into gridDim.y to keep each grid axis small
     dim3 gridDim(
-        (width  + TILE_W - 1) / TILE_W,
-        (height + TILE_H - 1) / TILE_H,
-        batch_size * out_channels
+        tiles_x,                // tile index in width
+        tiles_y * batch_size,   // (batch, tile_y)
+        out_channels            // output channel
     );
 
     conv2d_relu_forward_kernel<<<gridDim, blockDim>>>(

@@ -23,13 +23,17 @@ __global__ void conv2d_relu_forward_kernel(
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
+    // Number of tiles along height (per image)
+    int tiles_y = (height + TILE_H - 1) / TILE_H;
+
     // Output tile origin (top-left corner)
     int ow_base = blockIdx.x * TILE_W;
-    int oh_base = blockIdx.y * TILE_H;
 
-    // Decode batch and output channel from blockIdx.z
-    int oc = blockIdx.z % out_channels;
-    int b  = blockIdx.z / out_channels;
+    // Decode batch and tile_y from blockIdx.y, and output channel from blockIdx.z
+    int oc = blockIdx.z;                 // [0, out_channels)
+    int b  = blockIdx.y / tiles_y;       // batch index
+    int tile_y = blockIdx.y % tiles_y;   // tile index along height
+    int oh_base = tile_y * TILE_H;
 
     // Actual output coordinate handled by this thread
     int ow = ow_base + tx;
