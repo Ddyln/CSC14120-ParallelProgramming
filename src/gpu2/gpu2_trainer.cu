@@ -287,18 +287,43 @@ void extract_and_save_features_gpu2(
     // Save features
     printf("\nSaving features to binary files...\n");
     
-    FILE* train_file = fopen("train_features_gpu2.bin", "wb");
-    if (train_file) {
-        fwrite(train_features, sizeof(float), dataset.train_size() * feature_size, train_file);
-        fclose(train_file);
-        printf("Training features saved to: train_features_gpu2.bin\n");
+    char train_path[512], test_path[512];
+    char train_labels_path[512], test_labels_path[512];
+    
+    snprintf(train_path, sizeof(train_path), "%s/gpu_train_features.bin", output_folder);
+    snprintf(test_path, sizeof(test_path), "%s/gpu_test_features.bin", output_folder);
+    snprintf(train_labels_path, sizeof(train_labels_path), "%s/train_labels.bin", output_folder);
+    snprintf(test_labels_path, sizeof(test_labels_path), "%s/test_labels.bin", output_folder);
+
+    // Save train features
+    FILE* f_train = fopen(train_path, "wb");
+    if (f_train) {
+        fwrite(train_features, sizeof(float), dataset.train_size() * feature_size, f_train);
+        fclose(f_train);
+        printf("Saved training features to: %s\n", train_path);
     }
 
-    FILE* test_file = fopen("test_features_gpu2.bin", "wb");
-    if (test_file) {
-        fwrite(test_features, sizeof(float), dataset.test_size() * feature_size, test_file);
-        fclose(test_file);
-        printf("Test features saved to: test_features_gpu2.bin\n");
+    // Save test features
+    FILE* f_test = fopen(test_path, "wb");
+    if (f_test) {
+        fwrite(test_features, sizeof(float), dataset.test_size() * feature_size, f_test);
+        fclose(f_test);
+        printf("Saved test features to: %s\n", test_path);
+    }
+
+    // Save label
+    FILE* f_train_labels = fopen(train_labels_path, "wb");
+    if (f_train_labels) {
+        fwrite(dataset.train_labels().data(), sizeof(uint8_t), dataset.train_size(), f_train_labels);
+        fclose(f_train_labels);
+        printf("Saved training labels to: %s\n", train_labels_path);
+    }
+
+    FILE* f_test_labels = fopen(test_labels_path, "wb");
+    if (f_test_labels) {
+        fwrite(dataset.test_labels().data(), sizeof(uint8_t), dataset.test_size(), f_test_labels);
+        fclose(f_test_labels);
+        printf("Saved test labels to: %s\n", test_labels_path);
     }
 
     printf("\n========================================\n");
