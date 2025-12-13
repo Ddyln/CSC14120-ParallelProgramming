@@ -5,9 +5,11 @@
 
 // GPU Autoencoder v1
 // Optimizations (distinct from GPU v2):
-//  - Kernel fusion: Conv2D + ReLU in a single kernel for conv1-4
+//  - Kernel fusion: Conv2D + ReLU in a single kernel for conv1-4 (loop-unrolled for efficiency)
+//  - Loop Unrolling: 3x3 kernel manually unrolled to reduce loop overhead & enable compiler optimization
+//  - Pinned Host Memory: Input/Target buffers use cudaMallocHost for faster H2D/D2H transfers
 //  - Reduced global memory traffic (no separate ReLU kernel reads/writes)
-//  - Synchronous H2D/D2H transfers (no pinned memory, no multi-stream, no constant memory)
+//  - Note: no const memory, no multi-stream (those are in GPU v2)
 //
 // Architecture is identical to CPU/GPU/GPU2 versions.
 
@@ -44,6 +46,10 @@ private:
     float *h_w3, *h_b3;
     float *h_w4, *h_b4;
     float *h_w5, *h_b5;
+
+    // Pinned host memory for input/target (faster H2D/D2H transfers)
+    float *h_input_pinned;
+    float *h_target_pinned;
 
     // Device-side weights/biases
     float *d_w1, *d_b1;

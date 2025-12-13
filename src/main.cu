@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
         // GPU v1 Optimized Implementation
         // ================================================================
         printf("\n>>> Using GPU v1 Optimized Implementation <<<\n");
-        printf(">>> Optimizations: Fused Conv2D+ReLU + Shared-Memory Tiling (v1) <<<\n");
+        printf(">>> Optimizations: Kernel Fusion (Conv+ReLU) + Loop Unrolling + Pinned Memory <<<\n");
 
         GPU1Autoencoder gpu1_model;
         gpu1_model.initialize();
