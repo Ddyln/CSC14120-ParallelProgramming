@@ -1,6 +1,7 @@
 #include "cpu/feature_extractor.h"
 
 #include <cstdio>
+#include <chrono>
 
 void extract_and_save_features(
     Autoencoder& model,
@@ -11,6 +12,8 @@ void extract_and_save_features(
     const int feature_size = 8 * 8 * 128;
     float* train_features = new float[dataset.train_size() * feature_size];
     float* test_features = new float[dataset.test_size() * feature_size];
+
+    auto total_start = std::chrono::high_resolution_clock::now();
 
     // Extract training features
     printf("Extracting training features...\n");
@@ -64,5 +67,17 @@ void extract_and_save_features(
     delete[] train_features;
     delete[] test_features;
 
-    printf("\nFeature extraction complete!\n");
+    auto total_end = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::seconds>(
+        total_end - total_start
+    );
+
+    printf("\n========================================\n");
+    printf("Feature Extraction Summary (CPU)\n");
+    printf("========================================\n");
+    printf("Total feature extraction time: %ld seconds (%.1f min)\n", 
+           total_duration.count(),
+           total_duration.count() / 60.0f);
+    printf("========================================\n\n");
+    printf("Feature extraction complete!\n");
 }

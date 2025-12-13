@@ -8,3 +8,7 @@ RUN_GUIDE.md
 output_v2/
 OPTIMIZATION_SUMMARY.txt
 README_GPU2_V2.1.md
+METRICS_QUICK_REFERENCE.md
+METRICS_TRACKING_SUMMARY.md
+svm_classifier_fast.ipynb
+svm_classifier.ipynb

@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <cstdio>
+#include <climits>
+#include <cfloat>
 
 #include "cpu/layers.h"
 
@@ -17,12 +19,16 @@ void train_autoencoder(
     printf("\tLearning rate: %.4f\n", config.learning_rate);
 
     const size_t num_batches = dataset.train_size() / config.batch_size;
+    
+    float best_loss = FLT_MAX;
+    auto total_train_start = std::chrono::high_resolution_clock::now();
 
     for (int epoch = 0; epoch < config.epochs; epoch++) {
         auto epoch_start = std::chrono::high_resolution_clock::now();
         dataset.shuffle_train();
 
         float epoch_loss = 0.0f;
+        float epoch_best_loss = FLT_MAX;
 
         for (size_t batch = 0; batch < num_batches; batch++) {
             auto batch_start = std::chrono::high_resolution_clock::now();
@@ -44,6 +50,7 @@ void train_autoencoder(
 
             // compute loss
             float batch_loss = mse_loss(output, batch_images, output_size);
+            epoch_best_loss = (batch_loss < epoch_best_loss) ? batch_loss : epoch_best_loss;
 
             // backward pass
             auto t_backward_start = std::chrono::high_resolution_clock::now();
@@ -83,16 +90,34 @@ void train_autoencoder(
         auto epoch_duration =
             std::chrono::duration_cast<std::chrono::seconds>(epoch_end - epoch_start);
 
+        float avg_loss = epoch_loss / num_batches;
+        if (avg_loss < best_loss) best_loss = avg_loss;
+        
         printf(
-            "Epoch %d/%d - Loss: %.6f - Time: %ld seconds\n",
+            "Epoch %d/%d - Avg Loss: %.6f (Best: %.6f) - Time: %ld seconds\n",
             epoch + 1,
             config.epochs,
-            epoch_loss / num_batches,
+            avg_loss,
+            epoch_best_loss,
             epoch_duration.count()
         );
     }
 
-    printf("\nSaving model weights...\n");
+    auto total_train_end = std::chrono::high_resolution_clock::now();
+    auto total_train_duration = std::chrono::duration_cast<std::chrono::seconds>(
+        total_train_end - total_train_start
+    );
+    
+    printf("\n========================================\n");
+    printf("Training Summary (CPU)\n");
+    printf("========================================\n");
+    printf("Best Loss: %.6f\n", best_loss);
+    printf("Total Training Time: %ld seconds (%.1f min)\n", 
+           total_train_duration.count(), 
+           total_train_duration.count() / 60.0f);
+    printf("========================================\n\n");
+
+    printf("Saving model weights...\n");
     char model_path[512];
     snprintf(
         model_path,

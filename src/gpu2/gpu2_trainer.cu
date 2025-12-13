@@ -4,6 +4,8 @@
 #include <stdio.h>
 
 #include <chrono>
+#include <climits>
+#include <cfloat>
 
 #include "common/cifar10_dataset.h"
 
@@ -40,6 +42,11 @@ void train_gpu2_autoencoder(
     const size_t num_batches = dataset.train_size() / config.batch_size;
     const size_t output_size = config.batch_size * 3 * 32 * 32;
 
+    // Get initial GPU memory
+    size_t free_mem_before, total_mem;
+    CUDA_CHECK(cudaMemGetInfo(&free_mem_before, &total_mem));
+    size_t used_mem_before = total_mem - free_mem_before;
+
     // Allocate host output buffer (pinned memory)
     float* h_output;
     CUDA_CHECK(cudaMallocHost(&h_output, output_size * sizeof(float)));
@@ -49,6 +56,7 @@ void train_gpu2_autoencoder(
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    float best_loss = FLT_MAX;
     auto total_start = std::chrono::high_resolution_clock::now();
 
     for (int epoch = 0; epoch < config.epochs; epoch++) {
@@ -65,6 +73,7 @@ void train_gpu2_autoencoder(
         float epoch_forward_time = 0.0f;
         float epoch_backward_time = 0.0f;
         float epoch_update_time = 0.0f;
+        float epoch_best_loss = FLT_MAX;
 
         for (size_t batch = 0; batch < num_batches; batch++) {
             // Get next batch from dataset
@@ -89,6 +98,7 @@ void train_gpu2_autoencoder(
             // ================================================================
             float batch_loss = model.compute_loss(batch_images, config.batch_size);
             epoch_loss += batch_loss;
+            epoch_best_loss = (batch_loss < epoch_best_loss) ? batch_loss : epoch_best_loss;
 
             // ================================================================
             // Backward Pass (GPU with Async Transfers)
@@ -133,9 +143,10 @@ void train_gpu2_autoencoder(
         );
 
         float avg_loss = epoch_loss / num_batches;
-        printf("Epoch %d/%d Complete - Avg Loss: %.6f - Time: %ld ms (Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
+        printf("Epoch %d/%d Complete - Avg Loss: %.6f (Best: %.6f) - Time: %ld ms (Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
                epoch + 1, config.epochs,
                avg_loss,
+               epoch_best_loss,
                epoch_duration.count(),
                epoch_forward_time, epoch_backward_time, epoch_update_time);
     }
@@ -145,13 +156,30 @@ void train_gpu2_autoencoder(
         total_end - total_start
     );
 
-    printf("\n========================================\n");
-    printf("Training Complete!\n");
-    printf("Total training time: %ld seconds\n", total_duration.count());
-    printf("========================================\n");
+    // Get final GPU memory
+    size_t free_mem_after;
+    CUDA_CHECK(cudaMemGetInfo(&free_mem_after, &total_mem));
+    size_t used_mem_after = total_mem - free_mem_after;
+    size_t peak_mem_used = used_mem_before > used_mem_after ? used_mem_before : used_mem_after;
 
-    // Save model weights
-    printf("\nSaving GPU2 model weights...\n");
+    printf("\n========================================\n");
+    printf("Training Summary (GPU2 Optimized)\n");
+    printf("========================================\n");
+    printf("Best Loss: %.6f\n", best_loss);
+    printf("Total Training Time: %ld seconds (%.1f min)\n", 
+           total_duration.count(),
+           total_duration.count() / 60.0f);
+    printf("GPU Memory (Before): %.1f MB / %.1f MB\n", 
+           used_mem_before / (1024.0f * 1024.0f),
+           total_mem / (1024.0f * 1024.0f));
+    printf("GPU Memory (After):  %.1f MB / %.1f MB\n",
+           used_mem_after / (1024.0f * 1024.0f),
+           total_mem / (1024.0f * 1024.0f));
+    printf("Peak Memory Used:    %.1f MB\n",
+           peak_mem_used / (1024.0f * 1024.0f));
+    printf("========================================\n\n");
+
+    printf("Saving GPU2 model weights...\n");
     char model_path[512];
     snprintf(model_path, sizeof(model_path), "%s/gpu2_autoencoder_weights.bin", output_folder);
     model.save_weights(model_path);
@@ -274,7 +302,12 @@ void extract_and_save_features_gpu2(
     }
 
     printf("\n========================================\n");
-    printf("Feature extraction complete!\n");
+    printf("Feature Extraction Summary (GPU2)\n");
+    printf("========================================\n");
+    printf("Total feature extraction time: %ld ms (%.1f sec)\n", 
+           duration.count(),
+           duration.count() / 1000.0f);
+    printf("========================================\n");
     printf("Total extraction time: %ld ms\n", duration.count());
     printf("========================================\n");
 
