@@ -8,8 +8,8 @@
 #include "gpu/gpu_layers.cuh"  // reuse baseline kernels and wrappers
 
 // Fused Conv2D(3x3, padding=1, stride=1) + ReLU
-// Shared-memory tiling over spatial dimensions to reduce global reads.
-// Each block processes an 8x8 output tile for a fixed (batch, out_channel).
+// Kernel-level fusion: compute Conv2D and apply ReLU in single kernel without shared memory.
+// Each thread computes one output element independently.
 __global__ void conv2d_relu_forward_kernel(
     const float* input,
     const float* weights,
@@ -22,7 +22,7 @@ __global__ void conv2d_relu_forward_kernel(
     int width
 );
 
-// Host wrapper for fused Conv2D+ReLU with shared-memory tiling
+// Host wrapper for fused Conv2D+ReLU (simple kernel-level fusion)
 inline void gpu1_conv2d_relu_forward(
     const float* d_input,
     const float* d_weights,
@@ -34,22 +34,11 @@ inline void gpu1_conv2d_relu_forward(
     int height,
     int width
 ) {
-    // Tile size must match constants inside kernel implementation
-    const int TILE_W = 8;
-    const int TILE_H = 8;
+    int total_outputs = batch_size * out_channels * height * width;
+    int block_size = 256;
+    int grid_size = (total_outputs + block_size - 1) / block_size;
 
-    const int tiles_x = (width  + TILE_W - 1) / TILE_W;
-    const int tiles_y = (height + TILE_H - 1) / TILE_H;
-
-    dim3 blockDim(TILE_W, TILE_H);
-    // Fold batch dimension into gridDim.y to keep each grid axis small
-    dim3 gridDim(
-        tiles_x,                // tile index in width
-        tiles_y * batch_size,   // (batch, tile_y)
-        out_channels            // output channel
-    );
-
-    conv2d_relu_forward_kernel<<<gridDim, blockDim>>>(
+    conv2d_relu_forward_kernel<<<grid_size, block_size>>>(
         d_input,
         d_weights,
         d_bias,

@@ -50,7 +50,7 @@ GPU1Autoencoder::GPU1Autoencoder() {
     d_dL_dact1 = d_dL_dinput = nullptr;
 
     current_batch_size = 0;
-    max_batch_size = 128;
+    max_batch_size = 64;
     memory_allocated = false;
 }
 

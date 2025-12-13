@@ -122,7 +122,7 @@ void extract_and_save_features_gpu1(
     printf("========================================\n");
 
     const int feature_size = 8 * 8 * 128;
-    const int batch_size = 128;
+    const int batch_size = 64;
 
     float* train_features = new float[dataset.train_size() * feature_size];
     float* test_features  = new float[dataset.test_size()  * feature_size];

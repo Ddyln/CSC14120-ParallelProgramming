@@ -5,7 +5,7 @@
 #include "gpu1/gpu1_autoencoder.h"
 
 struct GPU1TrainConfig {
-    int batch_size = 128;
+    int batch_size = 64;
     int epochs = 20;
     float learning_rate = 0.001f;
     bool verbose = true;

@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
         gpu1_model.initialize();
 
         GPU1TrainConfig gpu1_config;
-        gpu1_config.batch_size = 128;
+        gpu1_config.batch_size = 64;
         gpu1_config.epochs = 20;
         gpu1_config.learning_rate = 0.001f;
         gpu1_config.verbose = true;
