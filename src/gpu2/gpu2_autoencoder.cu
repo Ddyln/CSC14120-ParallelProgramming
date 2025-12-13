@@ -494,16 +494,27 @@ void GPU2Autoencoder::load_weights(const std::string& filepath) {
         allocate_host_memory();
     }
 
-    fread(h_w1, sizeof(float), W1_SIZE, f);
-    fread(h_b1, sizeof(float), B1_SIZE, f);
-    fread(h_w2, sizeof(float), W2_SIZE, f);
-    fread(h_b2, sizeof(float), B2_SIZE, f);
-    fread(h_w3, sizeof(float), W3_SIZE, f);
-    fread(h_b3, sizeof(float), B3_SIZE, f);
-    fread(h_w4, sizeof(float), W4_SIZE, f);
-    fread(h_b4, sizeof(float), B4_SIZE, f);
-    fread(h_w5, sizeof(float), W5_SIZE, f);
-    fread(h_b5, sizeof(float), B5_SIZE, f);
+    size_t got = 0;
+    got = fread(h_w1, sizeof(float), W1_SIZE, f);
+    if (got != (size_t)W1_SIZE) { fprintf(stderr, "Failed reading W1 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_b1, sizeof(float), B1_SIZE, f);
+    if (got != (size_t)B1_SIZE) { fprintf(stderr, "Failed reading B1 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_w2, sizeof(float), W2_SIZE, f);
+    if (got != (size_t)W2_SIZE) { fprintf(stderr, "Failed reading W2 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_b2, sizeof(float), B2_SIZE, f);
+    if (got != (size_t)B2_SIZE) { fprintf(stderr, "Failed reading B2 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_w3, sizeof(float), W3_SIZE, f);
+    if (got != (size_t)W3_SIZE) { fprintf(stderr, "Failed reading W3 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_b3, sizeof(float), B3_SIZE, f);
+    if (got != (size_t)B3_SIZE) { fprintf(stderr, "Failed reading B3 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_w4, sizeof(float), W4_SIZE, f);
+    if (got != (size_t)W4_SIZE) { fprintf(stderr, "Failed reading W4 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_b4, sizeof(float), B4_SIZE, f);
+    if (got != (size_t)B4_SIZE) { fprintf(stderr, "Failed reading B4 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_w5, sizeof(float), W5_SIZE, f);
+    if (got != (size_t)W5_SIZE) { fprintf(stderr, "Failed reading W5 (GPU2)\n"); fclose(f); return; }
+    got = fread(h_b5, sizeof(float), B5_SIZE, f);
+    if (got != (size_t)B5_SIZE) { fprintf(stderr, "Failed reading B5 (GPU2)\n"); fclose(f); return; }
 
     fclose(f);
 
