@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
         gpu_model.initialize();
 
         GPUTrainConfig gpu_config;
-        gpu_config.batch_size = 256;
+        gpu_config.batch_size = 64;
         gpu_config.epochs = 20;
         gpu_config.learning_rate = 0.001f;
         gpu_config.verbose = true;
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
         gpu2_model.initialize();
 
         GPU2TrainConfig gpu2_config;
-        gpu2_config.batch_size = 256;
+        gpu2_config.batch_size = 64;
         gpu2_config.epochs = 20;
         gpu2_config.learning_rate = 0.001f;
         gpu2_config.verbose = true;

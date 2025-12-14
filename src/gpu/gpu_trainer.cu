@@ -36,11 +36,6 @@ void train_gpu_autoencoder(
     const size_t num_batches = dataset.train_size() / config.batch_size;
     const size_t output_size = config.batch_size * 3 * 32 * 32;
 
-    // Get initial GPU memory
-    size_t free_mem_before, total_mem;
-    CUDA_CHECK(cudaMemGetInfo(&free_mem_before, &total_mem));
-    size_t used_mem_before = total_mem - free_mem_before;
-
     // Allocate host output buffer
     float* h_output = new float[output_size];
 
@@ -48,6 +43,12 @@ void train_gpu_autoencoder(
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
+
+    // Không cần lấy bộ nhớ GPU ban đầu nữa vì model đã được khởi tạo trước đó
+    // // Get initial GPU memory (after model initialization)
+    // size_t free_mem_before, total_mem;
+    // CUDA_CHECK(cudaMemGetInfo(&free_mem_before, &total_mem));
+    // size_t used_mem_before = total_mem - free_mem_before;
 
     float best_loss = FLT_MAX;
     auto total_start = std::chrono::high_resolution_clock::now();
@@ -151,10 +152,9 @@ void train_gpu_autoencoder(
     );
 
     // Get final GPU memory
-    size_t free_mem_after;
+    size_t free_mem_after, total_mem;
     CUDA_CHECK(cudaMemGetInfo(&free_mem_after, &total_mem));
     size_t used_mem_after = total_mem - free_mem_after;
-    size_t peak_mem_used = used_mem_before > used_mem_after ? used_mem_before : used_mem_after;
 
     printf("\n========================================\n");
     printf("Training Summary (GPU Baseline)\n");
@@ -163,14 +163,9 @@ void train_gpu_autoencoder(
     printf("Total Training Time: %ld seconds (%.1f min)\n", 
            total_duration.count(),
            total_duration.count() / 60.0f);
-    printf("GPU Memory (Before): %.1f MB / %.1f MB\n", 
-           used_mem_before / (1024.0f * 1024.0f),
-           total_mem / (1024.0f * 1024.0f));
-    printf("GPU Memory (After):  %.1f MB / %.1f MB\n",
+    printf("GPU Memory Usage:  %.1f MB / %.1f MB\n",
            used_mem_after / (1024.0f * 1024.0f),
            total_mem / (1024.0f * 1024.0f));
-    printf("Peak Memory Used:    %.1f MB\n",
-           peak_mem_used / (1024.0f * 1024.0f));
     printf("========================================\n\n");
 
     // Save model weights

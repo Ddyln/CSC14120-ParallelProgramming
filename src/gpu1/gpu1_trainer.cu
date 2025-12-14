@@ -6,6 +6,8 @@
 
 #include <chrono>
 #include <cstring>
+#include <climits>
+#include <cfloat>
 #include "common/gpu_info.h"
 
 void train_gpu1_autoencoder(
@@ -37,6 +39,7 @@ void train_gpu1_autoencoder(
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    float best_loss = FLT_MAX;
     auto total_start = std::chrono::high_resolution_clock::now();
 
     for (int epoch = 0; epoch < config.epochs; epoch++) {
@@ -50,6 +53,7 @@ void train_gpu1_autoencoder(
         float epoch_forward_time = 0.0f;
         float epoch_backward_time = 0.0f;
         float epoch_update_time = 0.0f;
+        float epoch_best_loss = FLT_MAX;
 
         for (size_t batch = 0; batch < num_batches; batch++) {
             auto batch_data = dataset.next_train_batch(config.batch_size);
