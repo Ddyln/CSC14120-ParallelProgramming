@@ -62,8 +62,8 @@ bash ./scripts/run_extract_features.sh ./data/cifar-10-binary/cifar-10-batches-b
 ## Members
 | Student ID     | Name       |
 |-|-|
+|22120070		 | Nguyễn Thành Đức|
 |22120071		 | Phan Bá Đức|
-|22120078		 | Nguyễn Thành Đức|
 |22120182		 | Đặng Duy Lân| 
 
 ## References
