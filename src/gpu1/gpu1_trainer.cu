@@ -38,6 +38,7 @@ void train_gpu1_autoencoder(
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    float best_loss = FLT_MAX;
     auto total_start = std::chrono::high_resolution_clock::now();
 
     for (int epoch = 0; epoch < config.epochs; epoch++) {
@@ -99,12 +100,14 @@ void train_gpu1_autoencoder(
         auto epoch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(epoch_end - epoch_start);
 
         float avg_loss = epoch_loss / num_batches;
-        double gpu_mem_current = gpu_info::get_gpu_memory_used_gb();
-        printf("Epoch %d/%d Complete - Avg Loss: %.6f - Best Loss: %.6f - Time: %ld ms - GPU Mem: %.3f GB\n",
+        if (avg_loss < best_loss) best_loss = avg_loss;
+        
+        printf("Epoch %d/%d Complete - Avg Loss: %.6f (Best: %.6f) - Time: %ld ms (Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
                epoch + 1, config.epochs,
-               avg_loss, best_loss,
+               avg_loss,
+               epoch_best_loss,
                epoch_duration.count(),
-               gpu_mem_current);
+               epoch_forward_time, epoch_backward_time, epoch_update_time);
     }
 
     auto total_end = std::chrono::high_resolution_clock::now();
