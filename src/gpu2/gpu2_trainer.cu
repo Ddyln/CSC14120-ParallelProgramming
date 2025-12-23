@@ -232,7 +232,7 @@ void extract_and_save_features_gpu2(
                batch_size * feature_size * sizeof(float));
 
         if ((i + 1) % 10 == 0) {
-            printf("  Extracted %zu/%zu training batches\n", i + 1, num_train_batches);
+            printf("  Processed %zu/%zu batches\n", i + 1, num_train_batches);
         }
     }
 
@@ -246,7 +246,7 @@ void extract_and_save_features_gpu2(
         memcpy(train_features + num_train_batches * batch_size * feature_size,
                batch_features,
                train_remaining * feature_size * sizeof(float));
-        printf("  Extracted remaining %zu training samples\n", train_remaining);
+        printf("  Processed remaining %zu training samples\n", train_remaining);
     }
 
     // Extract test features
@@ -266,7 +266,7 @@ void extract_and_save_features_gpu2(
                batch_size * feature_size * sizeof(float));
 
         if ((i + 1) % 10 == 0) {
-            printf("  Extracted %zu/%zu test batches\n", i + 1, num_test_batches);
+            printf("  Processed %zu/%zu batches\n", i + 1, num_test_batches);
         }
     }
 
@@ -279,7 +279,7 @@ void extract_and_save_features_gpu2(
         memcpy(test_features + num_test_batches * batch_size * feature_size,
                batch_features,
                test_remaining * feature_size * sizeof(float));
-        printf("  Extracted remaining %zu test samples\n", test_remaining);
+        printf("  Processed remaining %zu test samples\n", test_remaining);
     }
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -291,8 +291,8 @@ void extract_and_save_features_gpu2(
     char train_path[512], test_path[512];
     char train_labels_path[512], test_labels_path[512];
     
-    snprintf(train_path, sizeof(train_path), "%s/gpu_train_features.bin", output_folder);
-    snprintf(test_path, sizeof(test_path), "%s/gpu_test_features.bin", output_folder);
+    snprintf(train_path, sizeof(train_path), "%s/gpu2_train_features.bin", output_folder);
+    snprintf(test_path, sizeof(test_path), "%s/gpu2_test_features.bin", output_folder);
     snprintf(train_labels_path, sizeof(train_labels_path), "%s/train_labels.bin", output_folder);
     snprintf(test_labels_path, sizeof(test_labels_path), "%s/test_labels.bin", output_folder);
 

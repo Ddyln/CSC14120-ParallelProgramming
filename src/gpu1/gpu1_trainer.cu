@@ -8,7 +8,6 @@
 #include <cstring>
 #include <climits>
 #include <cfloat>
-#include "common/gpu_info.h"
 
 void train_gpu1_autoencoder(
     GPU1Autoencoder& model,
@@ -17,17 +16,17 @@ void train_gpu1_autoencoder(
     const char* output_folder
 ) {
     printf("\n========================================\n");
-    printf("GPU Autoencoder Training (v1 - fused conv + shared memory)\n");
+    printf("GPU Autoencoder Training (v1 - Optimized)\n");
+    printf("Optimizations:\n");
+    printf("- Kernel Fusion (Conv2D + ReLU)\n");
+    printf("- Loop Unrolling (3x3 kernel)\n");
+    printf("- Shared Memory Tiling\n");
+    printf("- Pinned Host Memory (H2D/D2H)\n");
     printf("========================================\n");
     printf("Batch size: %d\n", config.batch_size);
     printf("Epochs: %d\n", config.epochs);
     printf("Learning rate: %.4f\n", config.learning_rate);
     printf("Training samples: %zu\n", dataset.train_size());
-    printf("========================================\n");
-    
-    // Memory before training
-    double gpu_mem_before = gpu_info::get_gpu_memory_used_gb();
-    printf("GPU Memory before training: %.3f GB\n", gpu_mem_before);
     printf("========================================\n\n");
 
     const size_t num_batches = dataset.train_size() / config.batch_size;
@@ -111,15 +110,22 @@ void train_gpu1_autoencoder(
     auto total_end = std::chrono::high_resolution_clock::now();
     auto total_duration = std::chrono::duration_cast<std::chrono::seconds>(total_end - total_start);
 
-    double gpu_mem_after = gpu_info::get_gpu_memory_used_gb();
+    // Get final GPU memory
+    size_t free_mem_after, total_mem;
+    cudaMemGetInfo(&free_mem_after, &total_mem);
+    size_t used_mem_after = total_mem - free_mem_after;
     
     printf("\n========================================\n");
-    printf("GPU v1 Training Complete!\n");
-    printf("Total training time: %ld seconds\n", total_duration.count());
-    printf("GPU Memory before training: %.3f GB\n", gpu_mem_before);
-    printf("GPU Memory after training: %.3f GB\n", gpu_mem_after);
-    printf("Peak GPU Memory used: %.3f GB\n", gpu_mem_after);
+    printf("Training Summary (GPU1 Optimized)\n");
     printf("========================================\n");
+    printf("Best Loss: %.6f\n", best_loss);
+    printf("Total Training Time: %ld seconds (%.1f min)\n", 
+           total_duration.count(),
+           total_duration.count() / 60.0f);
+    printf("GPU Memory Usage:  %.1f MB / %.1f MB\n",
+           used_mem_after / (1024.0f * 1024.0f),
+           total_mem / (1024.0f * 1024.0f));
+    printf("========================================\n\n");
 
     printf("\nSaving GPU1 model weights...\n");
     char model_path[512];
@@ -165,7 +171,7 @@ void extract_and_save_features_gpu1(
                     batch_size * feature_size * sizeof(float));
 
         if ((i + 1) % 100 == 0) {
-            printf("  Processed %zu/%zu training batches\n", i + 1, num_train_batches);
+            printf("  Processed %zu/%zu batches\n", i + 1, num_train_batches);
         }
     }
 
@@ -199,7 +205,7 @@ void extract_and_save_features_gpu1(
                     batch_size * feature_size * sizeof(float));
 
         if ((i + 1) % 25 == 0) {
-            printf("  Processed %zu/%zu test batches\n", i + 1, num_test_batches);
+            printf("  Processed %zu/%zu batches\n", i + 1, num_test_batches);
         }
     }
 
