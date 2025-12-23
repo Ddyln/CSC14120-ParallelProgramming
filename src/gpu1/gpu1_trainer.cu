@@ -48,7 +48,7 @@ void train_gpu1_autoencoder(
         dataset.reset_cursor();
 
         float epoch_loss = 0.0f;
-        float best_loss = FLT_MAX;
+        float epoch_best_loss = FLT_MAX;
         float epoch_forward_time = 0.0f;
         float epoch_backward_time = 0.0f;
         float epoch_update_time = 0.0f;
@@ -67,8 +67,8 @@ void train_gpu1_autoencoder(
 
             float batch_loss = model.compute_loss(batch_images, config.batch_size);
             epoch_loss += batch_loss;
-            if (batch_loss < best_loss) {
-                best_loss = batch_loss;
+            if (batch_loss < epoch_best_loss) {
+                epoch_best_loss = batch_loss;
             }
 
             cudaEventRecord(start);
@@ -105,7 +105,7 @@ void train_gpu1_autoencoder(
         printf("Epoch %d/%d Complete - Avg Loss: %.6f (Best: %.6f) - Time: %ld ms (Forward: %.0f ms, Backward: %.0f ms, Update: %.0f ms)\n",
                epoch + 1, config.epochs,
                avg_loss,
-               epoch_best_loss,
+               best_loss,
                epoch_duration.count(),
                epoch_forward_time, epoch_backward_time, epoch_update_time);
     }
