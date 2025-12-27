@@ -262,7 +262,6 @@ void GPU1Autoencoder::forward_device(const float* d_in, int batch_size) {
 void GPU1Autoencoder::forward(const float* h_input, float* h_output, int batch_size) {
     allocate_device_memory(batch_size);
 
-    // Use pinned memory for faster H2D transfer (optimization: Pinned Host Memory)
     int input_size = batch_size * 3 * 32 * 32 * sizeof(float);
     std::memcpy(h_input_pinned, h_input, input_size);
     CUDA_CHECK(cudaMemcpy(d_input, h_input_pinned, input_size, cudaMemcpyHostToDevice));
@@ -314,7 +313,6 @@ void GPU1Autoencoder::backward_device(const float* d_in, const float* d_tgt, int
 void GPU1Autoencoder::backward(const float* h_input, const float* h_target, int batch_size) {
     allocate_device_memory(batch_size);
 
-    // Use pinned memory for faster H2D transfer (optimization: Pinned Host Memory)
     int input_size = batch_size * 3 * 32 * 32 * sizeof(float);
     std::memcpy(h_input_pinned, h_input, input_size);
     std::memcpy(h_target_pinned, h_target, input_size);

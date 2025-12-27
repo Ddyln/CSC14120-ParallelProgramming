@@ -32,6 +32,7 @@ void train_gpu2_autoencoder(
     printf("- Constant Memory for Biases\n");
     printf("- Pinned Host Memory\n");
     printf("- Multi-Stream Pipeline (%d streams)\n", config.num_streams);
+    printf("- Memory Coalescing\n");
     printf("========================================\n");
     printf("Batch size: %d\n", config.batch_size);
     printf("Epochs: %d\n", config.epochs);
