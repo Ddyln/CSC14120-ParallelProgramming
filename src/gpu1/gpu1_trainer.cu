@@ -21,7 +21,6 @@ void train_gpu1_autoencoder(
     printf("- Kernel Fusion (Conv2D + ReLU)\n");
     printf("- Loop Unrolling (3x3 kernel)\n");
     printf("- Shared Memory Tiling\n");
-    printf("- Pinned Host Memory (H2D/D2H)\n");
     printf("========================================\n");
     printf("Batch size: %d\n", config.batch_size);
     printf("Epochs: %d\n", config.epochs);
